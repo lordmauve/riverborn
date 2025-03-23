@@ -2,14 +2,14 @@ import moderngl
 import moderngl_window as mglw
 import numpy as np
 import noise
-from pyrr import Matrix44, Vector3
+from pyrr import Matrix44, Quaternion, Vector3
 
 from . import terrain
 from .shader import load_shader
 from .camera import Camera
 
 
-def create_noise_texture(ctx: moderngl.Context, size: int = 256):
+def create_noise_texture(ctx: moderngl.Context, size: int = 256, color=(1.0, 1.0, 1.0)):
     """Generate a 256x256 texture with Perlin noise."""
     tex_width, tex_height = size, size
     texture_data = np.zeros((tex_height, tex_width, 3), dtype=np.uint8)
@@ -26,8 +26,8 @@ def create_noise_texture(ctx: moderngl.Context, size: int = 256):
                 repeaty=1024,
                 base=24,
             )
-            color = int((t + 1) * 0.5 * 255)
-            texture_data[i, j] = (color, color, color)
+            c = (t + 1) * 0.5
+            texture_data[i, j] = tuple(int(c * comp * 255) for comp in color)
     # Flip vertically to account for texture coordinate differences.
     texture_data = np.flipud(texture_data)
     texture = ctx.texture(
@@ -50,7 +50,58 @@ class HeightfieldApp(mglw.WindowConfig):
         # Build the grid geometry (positions, normals, uv's)
         mesh  = terrain.make_terrain(100, 100, 100, 10, 0.1)
 
-        # Create buffers: vertex buffer and index buffer.
+        self.instance = Instance(
+            self.ctx,
+            mesh,
+            load_shader(self.ctx, 'diffuse'),
+            create_noise_texture(self.ctx, color=(0.6, 0.5, 0.4))
+        )
+
+        # Create the camera.
+        self.camera = Camera(
+            eye=[0.0, 50.0, 100.0],
+            target=[0.0, 0.0, 0.0],
+            up=[0.0, 1.0, 0.0],
+            fov=70.0,
+            aspect=self.wnd.aspect_ratio,
+            near=0.1,
+            far=1000.0,
+        )
+
+        self.model = Matrix44.identity()
+        self.time = 0.0
+
+    def on_render(self, time, frame_time):
+        self.ctx.clear(0.2, 0.4, 0.6)
+        self.ctx.enable(moderngl.DEPTH_TEST)
+
+        self.time += frame_time
+        self.instance.rotation = Quaternion.from_eulers(
+            [0.0, self.time, 0.0], dtype=np.float32
+        )
+
+        # Update camera aspect if needed.
+        self.camera.set_aspect(self.wnd.aspect_ratio)
+        self.instance.render(self.camera)
+
+
+class Instance:
+    vao: moderngl.VertexArray
+    prog: moderngl.Program
+    texture: moderngl.Texture
+
+    def __init__(self,
+        ctx: moderngl.Context,
+        mesh: terrain.Mesh,
+        shader: moderngl.Program,
+        texture: moderngl.Texture
+    ) -> None:
+        self.pos = Vector3([0.0, 0.0, 0.0])
+        self.rotation = Quaternion()
+        self.ctx = ctx
+        self.mesh = mesh
+        self.prog = shader
+               # Create buffers: vertex buffer and index buffer.
         self.vbo = self.ctx.buffer(mesh.vertices)
         self.ibo = self.ctx.buffer(mesh.indices.astype("i4").tobytes())
 
@@ -65,42 +116,19 @@ class HeightfieldApp(mglw.WindowConfig):
         )
 
         # Create the texture (generated via Perlin noise).
-        self.texture = create_noise_texture(self.ctx)
+        self.texture = texture
+
+    def render(self, camera: Camera):
         self.texture.use(location=0)
         self.prog["Texture"] = 0
-
-        # Create the camera.
-        self.camera = Camera(
-            eye=[0.0, 50.0, 100.0],
-            target=[0.0, 0.0, 0.0],
-            up=[0.0, 1.0, 0.0],
-            fov=70.0,
-            aspect=self.wnd.aspect_ratio,
-            near=0.1,
-            far=1000.0,
-        )
-
-        # Set initial lighting uniforms.
         self.prog["light_dir"].value = (0.5, 1.0, 0.3)
         self.prog["light_color"].value = (1.0, 1.0, 1.0)
         self.prog["ambient_color"].value = (0.3, 0.3, 0.3)
 
-        self.model = Matrix44.identity()
-        self.time = 0.0
-
-    def on_render(self, time, frame_time):
-        self.ctx.clear(0.2, 0.4, 0.6)
-        self.ctx.enable(moderngl.DEPTH_TEST)
-
-        self.time += frame_time
-        # Rotate the model over time.
-        self.model = Matrix44.from_y_rotation(self.time * 0.5)
-
-        # Update camera aspect if needed.
-        self.camera.set_aspect(self.wnd.aspect_ratio)
+        model = Matrix44.from_translation(self.pos) * self.rotation
 
         # Bind the camera matrices (MVP and normal matrix) to the shader.
-        self.camera.bind(self.prog, self.model, normal_matrix="normal_matrix")
+        camera.bind(self.prog, model, normal_matrix="normal_matrix")
 
         self.vao.render()
 
