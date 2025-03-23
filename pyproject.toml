@@ -17,6 +17,7 @@ dependencies = [
 
 [project.scripts]
 riverborn = "riverborn:main"
+riverborn-heightfield = "riverborn.heightfield:main"
 
 
 [build-system]
