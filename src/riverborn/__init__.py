@@ -14,7 +14,7 @@ width = 100            # overall width of the plane
 height = 100           # overall height (depth) of the plane
 segments = 100         # number of subdivisions along each axis
 noise_scale = 0.05      # scale factor for noise sampling
-height_multiplier = 5  # multiply noise value to exaggerate heights
+height_multiplier = 10  # multiply noise value to exaggerate heights
 
 # -----------------------------
 # Create the plane geometry
@@ -44,7 +44,7 @@ for i, pos in enumerate(positions):
     e = 0.2
     dndx = (perlin((x + e) * noise_scale, y * noise_scale) - n) / e
     dndy = (perlin(x * noise_scale, (y + e) * noise_scale) - n) / e
-    normals[i] = -dndx, 1, -dndy
+    normals[i] = -dndx, e, -dndy
     # Set the height based on the noise value.
     # The height is exaggerated by a multiplier for better visibility.
     pos[:] = x, n * height_multiplier, -y
@@ -124,7 +124,7 @@ def animate():
     t = time.monotonic()
 
 
-    camera.local.position = (20 * np.cos(0.1 * t), 1, 20 * np.sin(0.1 * t))
+    camera.local.position = (20 * np.cos(0.1 * t), 10, 20 * np.sin(0.1 * t))
     camera.show_pos((0, 0, 0))
 
 def main():
