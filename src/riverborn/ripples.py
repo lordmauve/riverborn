@@ -31,19 +31,19 @@ uniform vec2 texel;
 in vec2 v_texcoord;
 out vec4 fragColor;
 
-const float dt = 0.5;
-const float tension = 1.04;
+const float dt = 1.0;
+const float tension = 0.1;
 const float damping_factor = 0.99;
 
 void main() {
-    vec2 hL = texture(curr_tex, v_texcoord - vec2(texel.x, 0.0)).rg;
-    vec2 hR = texture(curr_tex, v_texcoord + vec2(texel.x, 0.0)).rg;
-    vec2 hD = texture(curr_tex, v_texcoord - vec2(0.0, texel.y)).rg;
-    vec2 hU = texture(curr_tex, v_texcoord + vec2(0.0, texel.y)).rg;
+    float hL = texture(curr_tex, v_texcoord - vec2(texel.x, 0.0)).r;
+    float hR = texture(curr_tex, v_texcoord + vec2(texel.x, 0.0)).r;
+    float hD = texture(curr_tex, v_texcoord - vec2(0.0, texel.y)).r;
+    float hU = texture(curr_tex, v_texcoord + vec2(0.0, texel.y)).r;
     vec2 here = texture(curr_tex, v_texcoord).rg;
 
-    vec2 laplacian = hL + hR + hD + hU - 4.0 * here;
-    float velocity = here.g + tension * laplacian.r * dt;
+    float laplacian = hL + hR + hD + hU - 4.0 * here.r;
+    float velocity = here.g + tension * laplacian * dt;
     velocity *= damping_factor;
     float new_height = here.r + velocity * dt;
 
@@ -141,7 +141,7 @@ class WaterRippleDemo(moderngl_window.WindowConfig):
         self.render_prog['light_dir'].value = (-0.5, -0.5, 1.0)
 
         # For disturbance, set default thickness and intensity (tweak these)
-        self.disturb_prog['thickness'].value = 0.01
+        self.disturb_prog['thickness'].value = 0.005
         self.disturb_prog['intensity'].value = 0.5
 
         # For mouse drawing: store last mouse position in texture coordinates (or None)

@@ -167,6 +167,15 @@ wheels = [
 ]
 
 [[package]]
+name = "multipledispatch"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/fe/3e/a62c3b824c7dec33c4a1578bcc842e6c30300051033a4e5975ed86cc2536/multipledispatch-1.0.0.tar.gz", hash = "sha256:5c839915465c68206c3e9c473357908216c28383b425361e5d144594bf85a7e0", size = 12385 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/51/c0/00c9809d8b9346eb238a6bbd5f83e846a4ce4503da94a4c08cb7284c325b/multipledispatch-1.0.0-py3-none-any.whl", hash = "sha256:0c53cd8b077546da4e48869f49b13164bebafd0c2a5afceb6bb6a316e7fb46e4", size = 12818 },
+]
+
+[[package]]
 name = "noise"
 version = "1.2.2"
 source = { registry = "https://pypi.org/simple" }
@@ -298,6 +307,19 @@ wheels = [
 ]
 
 [[package]]
+name = "pyrr"
+version = "0.10.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "multipledispatch" },
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e5/7f/2af23f61340972116e4efabc3ac6e02c8bad7f7315b3002c278092963f17/pyrr-0.10.3.tar.gz", hash = "sha256:3c0f7b20326e71f706a610d58f2190fff73af01eef60c19cb188b186f0ec7e1d", size = 64845 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/80/d4/09bb74e93f9f677eadcf9ddb92681755f75e0f354a1b904f1913e32ca1b2/pyrr-0.10.3-py3-none-any.whl", hash = "sha256:d8af23fb9bb29262405845e1c98f7339fbba5e49323b98528bd01160a75c65ac", size = 46790 },
+]
+
+[[package]]
 name = "rendercanvas"
 version = "2.0.2"
 source = { registry = "https://pypi.org/simple" }
@@ -321,6 +343,7 @@ dependencies = [
     { name = "noise" },
     { name = "numpy" },
     { name = "pygfx" },
+    { name = "pyrr" },
 ]
 
 [package.metadata]
@@ -332,6 +355,7 @@ requires-dist = [
     { name = "noise", specifier = ">=1.2.2" },
     { name = "numpy", specifier = ">=2.2.4" },
     { name = "pygfx", specifier = ">=0.9.0" },
+    { name = "pyrr", specifier = ">=0.10.3" },
 ]
 
 [[package]]
