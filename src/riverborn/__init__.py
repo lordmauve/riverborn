@@ -1,11 +1,14 @@
 from functools import partial
+from itertools import product
 import time
+import importlib.resources
 from ._version import __version__
 
 import numpy as np
 import noise
 import pygfx as gfx
 import pylinalg as la
+import imageio as iio
 
 # -----------------------------
 # Parameters for the heightfield
@@ -73,6 +76,8 @@ for i in range(tex_height):
 # Create a pygfx texture object.
 texture = gfx.Texture(texture_data, dim=2)
 
+
+
 # -----------------------------
 # Create a material and mesh
 # -----------------------------
@@ -86,18 +91,46 @@ material = gfx.MeshStandardMaterial(
 )
 mesh = gfx.Mesh(plane, material)
 
+scene = gfx.Scene()
+scene.add(mesh)
+
 # -----------------------------
 # Set up the scene, camera, and renderer
 # -----------------------------
-scene = gfx.Scene()
-scene.add(mesh)
+
+def load_env_map():
+    images = []
+    skybox = importlib.resources.files()  / 'textures/skybox'
+    for axis, face in product(('x', 'y', 'z'), ('pos', 'neg')):
+        file = skybox / f'{face}{axis}.jpg'
+        img = iio.imread(file.open('rb'))
+        width, height, _ = img.shape
+        images.append(img)
+    im = np.array(images)
+    tex_size = (width, height, 6)
+
+    tex = gfx.Texture(im, dim=2, size=tex_size) #, generate_mipmaps=True)
+    return tex
+
+
+env_map = load_env_map()
+# And the background image with the cube texture
+background = gfx.Background(None, gfx.BackgroundSkyboxMaterial(map=env_map))
+scene.add(background)
+
 
 water = gfx.Mesh(
     gfx.geometries.plane_geometry(
         width=width,
         height=height,
     ),
-    gfx.MeshPhongMaterial(color='#8888ff20', specular='#fff8ee', shininess=50),
+    gfx.MeshStandardMaterial(
+        color='#8888ff20',
+        metalness=0.1,
+        roughness=0,
+        env_map=env_map,
+    ),
+    #gfx.MeshPhongMaterial(color='#8888ff20', specular='#fff8ee', shininess=50),
 )
 water.local.rotation = (0.7071, 0, 0, 0.7071)
 scene.add(water)
@@ -121,10 +154,10 @@ rot = la.quat_from_euler((0, 0.01, 0.0), order="XYZ")
 def animate():
     # Slowly rotate the mesh for a dynamic view.
     #mesh.local.rotation = la.quat_mul(rot, mesh.local.rotation)
-    t = time.monotonic()
+    t = time.monotonic() + 40
 
 
-    camera.local.position = (20 * np.cos(0.1 * t), 10, 20 * np.sin(0.1 * t))
+    camera.local.position = (20 * np.cos(0.1 * t), 5, 20 * np.sin(0.1 * t))
     camera.show_pos((0, 0, 0))
 
 def main():
