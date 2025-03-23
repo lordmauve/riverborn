@@ -47,12 +47,9 @@ class HeightfieldApp(mglw.WindowConfig):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        # Build the grid geometry (positions, normals, uv's)
-        mesh  = terrain.make_terrain(100, 100, 100, 10, 0.1)
-
         self.instance = Instance(
             self.ctx,
-            mesh,
+            terrain.make_terrain(100, 100, 100, 10, 0.1),
             load_shader(self.ctx, 'diffuse'),
             create_noise_texture(self.ctx, color=(0.6, 0.5, 0.4))
         )
@@ -68,7 +65,6 @@ class HeightfieldApp(mglw.WindowConfig):
             far=1000.0,
         )
 
-        self.model = Matrix44.identity()
         self.time = 0.0
 
     def on_render(self, time, frame_time):

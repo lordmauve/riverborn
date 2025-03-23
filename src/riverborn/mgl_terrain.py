@@ -1,9 +1,17 @@
+import importlib.resources
+from itertools import product
 import moderngl
 import moderngl_window as mglw
 import numpy as np
 import noise
 from pyrr import Matrix44, Vector3
+import imageio as iio
 
+from riverborn import terrain
+from riverborn.camera import Camera
+from riverborn.shader import load_shader
+
+from .heightfield import Instance, create_noise_texture
 
 # Helper: create a simple quad geometry with positions (3f) and UV coordinates (2f)
 def create_quad(size):
@@ -44,6 +52,24 @@ def generate_height_map(width=256, height=256, scale=0.1, octaves=4, base=24):
     return data
 
 
+def load_env_map(ctx: moderngl.Context) -> moderngl.TextureCube:
+    """Load a cube map texture from the textures/skybox directory."""
+    images = []
+    skybox = importlib.resources.files('riverborn') / "textures/skybox"
+    for axis, face in product(("x", "y", "z"), ("pos", "neg")):
+        file = skybox / f"{face}{axis}.jpg"
+        img = iio.imread(file.open("rb"))
+        width, height, _ = img.shape
+        images.append(img)
+    im = np.array(images)
+    tex_size = (width, height)
+    cube = ctx.texture_cube(tex_size, 3, data=None)
+    for i in range(6):
+        cube.write(i, images[i])
+    cube.build_mipmaps()
+    return cube
+
+
 # Helper: create a dummy cube map (each face gets a solid colour).
 def create_dummy_cubemap(ctx, size=64):
     # Define six face colors for a simple sky-like environment.
@@ -76,6 +102,24 @@ class WaterApp(mglw.WindowConfig):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+
+        self.terrain = Instance(
+            self.ctx,
+            terrain.make_terrain(100, 100, 100, 10, 0.1),
+            load_shader(self.ctx, 'diffuse'),
+            create_noise_texture(self.ctx, color=(0.6, 0.5, 0.4))
+        )
+
+        # Create the camera.
+        self.camera = Camera(
+            eye=[0.0, 50.0, 100.0],
+            target=[0.0, 0.0, 0.0],
+            up=[0.0, 1.0, 0.0],
+            fov=70.0,
+            aspect=self.wnd.aspect_ratio,
+            near=0.1,
+            far=1000.0,
+        )
 
         # ------------------------------
         # Offscreen framebuffer for water-bottom pass.
@@ -227,7 +271,7 @@ class WaterApp(mglw.WindowConfig):
         # ------------------------------
         # Create a dummy environment cube map.
         # ------------------------------
-        self.env_cube = create_dummy_cubemap(self.ctx, size=64)
+        self.env_cube = load_env_map(self.ctx)
         self.env_cube.use(location=1)
         self.water_prog["env_cube"].value = 1
 
@@ -240,12 +284,12 @@ class WaterApp(mglw.WindowConfig):
         # ------------------------------
         self.water_prog["near"].value = 0.1
         self.water_prog["far"].value = 1000.0
-        self.water_prog["water_level"].value = 10.0  # Set the water surface height.
+        self.water_prog["water_level"].value = 3.0  # Set the water surface height.
         self.water_prog["resolution"].value = self.wnd.size
 
         # Define model matrices.
         # Water plane: a translation upward to water_level.
-        self.water_model = Matrix44.from_translation([0.0, 10.0, 0.0])
+        self.water_model = Matrix44.from_translation([0.0, 1.0, 0.0])
         # Water-bottom: assume at y = 0.
         self.bottom_model = Matrix44.from_translation([0.0, 0.0, 0.0])
         self.water_prog["model"].write(self.water_model.astype("f4").tobytes())
@@ -258,32 +302,37 @@ class WaterApp(mglw.WindowConfig):
         # Enable blending for transparency in the water pass.
         self.ctx.enable(moderngl.BLEND)
         self.ctx.blend_func = (moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA)
+        self.ctx.enable(moderngl.DEPTH_TEST)
 
     def on_render(self, time, frame_time):
-        # Compute camera matrices.
-        aspect = self.wnd.aspect_ratio
-        proj = Matrix44.perspective_projection(70.0, aspect, 0.1, 1000.0)
-        view = Matrix44.look_at(self.camera_pos, self.look_at, (0.0, 1.0, 0.0))
+        self.camera.set_aspect(self.wnd.aspect_ratio)
 
         # ------------------------------
         # First pass: Render water-bottom scene into offscreen framebuffer.
         # ------------------------------
         self.offscreen_fbo.use()
         self.ctx.clear(0.0, 0.0, 0.0, 1.0)
+        self.terrain.render(self.camera)
         # For water bottom, we simply compute an mvp.
-        bottom_model = self.bottom_model
-        mvp_bottom = proj * view * bottom_model
-        self.bottom_vao.program["mvp"].write(mvp_bottom.astype("f4").tobytes())
-        self.bottom_vao.render()
+        # bottom_model = self.bottom_model
+        # mvp_bottom = proj * view * bottom_model
+        # self.bottom_vao.program["mvp"].write(mvp_bottom.astype("f4").tobytes())
+        # self.bottom_vao.render()
 
         # ------------------------------
         # Second pass: Render water plane to the default framebuffer.
         # ------------------------------
         self.ctx.screen.use()
         self.ctx.clear(0.2, 0.3, 0.4, 1.0)
-        mvp_water = proj * view * self.water_model
-        self.water_prog["mvp"].write(mvp_water.astype("f4").tobytes())
-        self.water_prog["camera_pos"].value = tuple(self.camera_pos)
+        self.terrain.render(self.camera)
+        # self.height_map_tex.use(location=0)
+        # self.water_prog["height_map"].value = 0
+        # self.env_cube.use(location=1)
+        # self.water_prog["env_cube"].value = 1
+        # self.offscreen_depth.use(location=2)
+        # self.water_prog["depth_tex"].value = 2
+
+        self.camera.bind(self.water_prog, self.water_model, mvp_uniform="mvp", pos="camera_pos")
         self.water_prog["resolution"].value = self.wnd.size
         self.water_vao.render()
 
@@ -298,5 +347,5 @@ class WaterApp(mglw.WindowConfig):
         self.water_prog["resolution"].value = (width, height)
 
 
-if __name__ == "__main__":
+def main():
     mglw.run_window_config(WaterApp)

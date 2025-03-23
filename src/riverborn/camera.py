@@ -38,7 +38,7 @@ class Camera:
             self.aspect = aspect
             self._dirty = True
 
-    def bind(self, prog, model, normal_matrix: str | None = None, mvp_uniform='mvp'):
+    def bind(self, prog, model, normal_matrix: str | None = None, mvp_uniform: str | None = 'mvp', pos: str | None = None):
         """
         Bind the computed MVP and normal matrix to the provided shader program.
         :param prog: The shader program (dictionary-like uniform access).
@@ -56,3 +56,5 @@ class Camera:
             # Compute the normal matrix (inverse-transpose of the model's upper 3x3).
             nm = np.linalg.inv(model[:3, :3]).T
             prog[normal_matrix].write(nm.astype("f4").tobytes())
+        if pos:
+            prog[pos].value = self.eye
