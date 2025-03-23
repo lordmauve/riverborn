@@ -203,6 +203,8 @@ class WaterApp(mglw.WindowConfig):
                 uniform vec2 resolution;
                 uniform float near;
                 uniform float far;
+                uniform vec3 base_water;
+                uniform float water_opaque_depth;
                 out vec4 f_color;
 
                 // Function to linearize a non-linear depth value.
@@ -225,11 +227,7 @@ class WaterApp(mglw.WindowConfig):
 
                     // --- Reflection from the environment.
                     vec3 refl_dir = reflect(-view_dir, perturbed_normal);
-                    vec3 refl_color = texture(env_cube, refl_dir).rgb;
-
-                    // --- Base water colour.
-                    vec3 base_water = vec3(0.3, 0.25, 0.2);
-                    vec3 color = mix(base_water, refl_color, fresnel);
+                    vec4 refl_color = vec4(texture(env_cube, refl_dir).rgb, 1.0);
 
                     // --- Depth-based transparency.
                     // Compute screen-space coordinates.
@@ -241,11 +239,11 @@ class WaterApp(mglw.WindowConfig):
                     float water_lin = linearizeDepth(gl_FragCoord.z);
                     float depth_diff = scene_lin - water_lin;
                     // When the water is shallow (small depth difference) we want more transparency.
-                    float threshold = 5.0;
-                    float shallow = clamp(depth_diff / threshold, 0.0, 1.0);
+                    float shallow = clamp(depth_diff / water_opaque_depth, 0.0, 1.0);
 
-                    // --- Final output.
-                    f_color = vec4(color, shallow);
+                    // Mix: reflection atop base water colour.
+                    vec4 diffuse = vec4(base_water, shallow);
+                    f_color = mix(diffuse, refl_color, fresnel);
                 }
             """,
         )
@@ -327,6 +325,9 @@ class WaterApp(mglw.WindowConfig):
         self.water_prog["env_cube"].value = 1
         self.offscreen_depth.use(location=2)
         self.water_prog["depth_tex"].value = 2
+
+        self.water_prog['base_water'] = (0.3, 0.25, 0.2)
+        self.water_prog['water_opaque_depth'] = 3
 
         self.camera.bind(self.water_prog, self.water_model, mvp_uniform="mvp", pos="camera_pos")
         self.water_prog["resolution"].value = self.wnd.size
