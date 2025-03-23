@@ -14,7 +14,7 @@ width = 100            # overall width of the plane
 height = 100           # overall height (depth) of the plane
 segments = 100         # number of subdivisions along each axis
 noise_scale = 0.05      # scale factor for noise sampling
-height_multiplier = 20  # multiply noise value to exaggerate heights
+height_multiplier = 5  # multiply noise value to exaggerate heights
 
 # -----------------------------
 # Create the plane geometry
@@ -107,7 +107,7 @@ scene.add(light := gfx.DirectionalLight(color=(1, 1, 1), intensity=1))
 light.local.position = (10, 10, 10)
 
 camera = gfx.PerspectiveCamera(70, 16/9)
-camera.local.position = (50, 20, 0)
+camera.local.position = (50, 5, 0)
 camera.show_pos((0, 0, 0))
 scene.add(camera)
 
@@ -124,7 +124,7 @@ def animate():
     t = time.monotonic()
 
 
-    camera.local.position = (50 * np.cos(0.1 * t), 20, 50 * np.sin(0.1 * t))
+    camera.local.position = (20 * np.cos(0.1 * t), 1, 20 * np.sin(0.1 * t))
     camera.show_pos((0, 0, 0))
 
 def main():
