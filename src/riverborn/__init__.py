@@ -13,10 +13,10 @@ import imageio as iio
 # -----------------------------
 # Parameters for the heightfield
 # -----------------------------
-width = 100            # overall width of the plane
-height = 100           # overall height (depth) of the plane
-segments = 100         # number of subdivisions along each axis
-noise_scale = 0.05      # scale factor for noise sampling
+width = 100  # overall width of the plane
+height = 100  # overall height (depth) of the plane
+segments = 100  # number of subdivisions along each axis
+noise_scale = 0.05  # scale factor for noise sampling
 height_multiplier = 10  # multiply noise value to exaggerate heights
 
 # -----------------------------
@@ -30,8 +30,15 @@ plane = gfx.geometries.plane_geometry(
     height_segments=segments,
 )
 
-perlin = partial(noise.pnoise2, octaves=4, persistence=0.5, lacunarity=2.0,
-                    repeatx=1024, repeaty=1024, base=42)
+perlin = partial(
+    noise.pnoise2,
+    octaves=4,
+    persistence=0.5,
+    lacunarity=2.0,
+    repeatx=1024,
+    repeaty=1024,
+    base=42,
+)
 
 # Modify the vertex positions to create a heightfield.
 # The positions attribute is an (N, 3) numpy array.
@@ -66,9 +73,16 @@ texture_noise_scale = 0.1
 for i in range(tex_height):
     for j in range(tex_width):
         # Sample noise; note the base value is different for variety.
-        t = noise.pnoise2(j * texture_noise_scale, i * texture_noise_scale,
-                           octaves=4, persistence=0.5, lacunarity=2.0,
-                           repeatx=1024, repeaty=1024, base=24)
+        t = noise.pnoise2(
+            j * texture_noise_scale,
+            i * texture_noise_scale,
+            octaves=4,
+            persistence=0.5,
+            lacunarity=2.0,
+            repeatx=1024,
+            repeaty=1024,
+            base=24,
+        )
         # Normalize the value from [-1,1] to [55,255]
         color = int((t + 1) * 0.5 * 200 + 55)
         texture_data[i, j] = (color, color, color)
@@ -77,12 +91,11 @@ for i in range(tex_height):
 texture = gfx.Texture(texture_data, dim=2)
 
 
-
 # -----------------------------
 # Create a material and mesh
 # -----------------------------
 # Use a Phong material to benefit from lighting and add our texture.
-#material = gfx.MeshPhongMaterial(color='#888888')
+# material = gfx.MeshPhongMaterial(color='#888888')
 material = gfx.MeshStandardMaterial(
     color=(0.6, 0.5, 0.4),
     roughness=5,
@@ -98,18 +111,19 @@ scene.add(mesh)
 # Set up the scene, camera, and renderer
 # -----------------------------
 
+
 def load_env_map():
     images = []
-    skybox = importlib.resources.files()  / 'textures/skybox'
-    for axis, face in product(('x', 'y', 'z'), ('pos', 'neg')):
-        file = skybox / f'{face}{axis}.jpg'
-        img = iio.imread(file.open('rb'))
+    skybox = importlib.resources.files() / "textures/skybox"
+    for axis, face in product(("x", "y", "z"), ("pos", "neg")):
+        file = skybox / f"{face}{axis}.jpg"
+        img = iio.imread(file.open("rb"))
         width, height, _ = img.shape
         images.append(img)
     im = np.array(images)
     tex_size = (width, height, 6)
 
-    tex = gfx.Texture(im, dim=2, size=tex_size) #, generate_mipmaps=True)
+    tex = gfx.Texture(im, dim=2, size=tex_size)  # , generate_mipmaps=True)
     return tex
 
 
@@ -125,12 +139,12 @@ water = gfx.Mesh(
         height=height,
     ),
     gfx.MeshStandardMaterial(
-        color='#8888ff20',
+        color="#8888ff20",
         metalness=0.1,
         roughness=0,
         env_map=env_map,
     ),
-    #gfx.MeshPhongMaterial(color='#8888ff20', specular='#fff8ee', shininess=50),
+    # gfx.MeshPhongMaterial(color='#8888ff20', specular='#fff8ee', shininess=50),
 )
 water.local.rotation = (0.7071, 0, 0, 0.7071)
 scene.add(water)
@@ -139,7 +153,7 @@ scene.add(water)
 scene.add(light := gfx.DirectionalLight(color=(1, 1, 1), intensity=1))
 light.local.position = (10, 10, 10)
 
-camera = gfx.PerspectiveCamera(70, 16/9)
+camera = gfx.PerspectiveCamera(70, 16 / 9)
 camera.local.position = (50, 5, 0)
 camera.show_pos((0, 0, 0))
 scene.add(camera)
@@ -153,16 +167,16 @@ rot = la.quat_from_euler((0, 0.01, 0.0), order="XYZ")
 
 def animate():
     # Slowly rotate the mesh for a dynamic view.
-    #mesh.local.rotation = la.quat_mul(rot, mesh.local.rotation)
+    # mesh.local.rotation = la.quat_mul(rot, mesh.local.rotation)
     t = time.monotonic() + 40
-
 
     camera.local.position = (20 * np.cos(0.1 * t), 5, 20 * np.sin(0.1 * t))
     camera.show_pos((0, 0, 0))
 
+
 def main():
     gfx.show(
         scene,
-        #controller=controls,
+        # controller=controls,
         before_render=animate,
     )

@@ -135,14 +135,14 @@ class WaterRippleDemo(moderngl_window.WindowConfig):
 
         # Set uniforms that remain constant
         texel = (1.0 / self.sim_width, 1.0 / self.sim_height)
-        self.sim_prog['texel'].value = texel
-        self.render_prog['texel'].value = texel
+        self.sim_prog["texel"].value = texel
+        self.render_prog["texel"].value = texel
         # Light coming from top-left (adjust as desired)
-        self.render_prog['light_dir'].value = (-0.5, -0.5, 1.0)
+        self.render_prog["light_dir"].value = (-0.5, -0.5, 1.0)
 
         # For disturbance, set default thickness and intensity (tweak these)
-        self.disturb_prog['thickness'].value = 0.005
-        self.disturb_prog['intensity'].value = 0.5
+        self.disturb_prog["thickness"].value = 0.005
+        self.disturb_prog["intensity"].value = 0.5
 
         # For mouse drawing: store last mouse position in texture coordinates (or None)
         self.last_mouse = None
@@ -155,7 +155,7 @@ class WaterRippleDemo(moderngl_window.WindowConfig):
 
         # Bind the current and previous height textures to texture units 0 and 1 respectively.
         self.height_textures[self.current_idx].use(location=0)
-        self.sim_prog['curr_tex'].value = 0
+        self.sim_prog["curr_tex"].value = 0
 
         # Render full-screen quad to update the simulation
         self.quad.render(self.sim_prog)
@@ -167,7 +167,7 @@ class WaterRippleDemo(moderngl_window.WindowConfig):
         self.ctx.screen.use()
         self.ctx.screen.clear(0.0, 0.0, 0.0, 1.0)
         self.height_textures[self.current_idx].use(location=0)
-        self.render_prog['height_tex'].value = 0
+        self.render_prog["height_tex"].value = 0
         self.quad.render(self.render_prog)
 
     def on_mouse_drag_event(self, x, y, dx, dy):
@@ -182,8 +182,8 @@ class WaterRippleDemo(moderngl_window.WindowConfig):
         self.fbos[self.current_idx].use()
         self.ctx.enable(moderngl.BLEND)
         self.ctx.blend_func = (moderngl.SRC_ALPHA, moderngl.ONE)
-        self.disturb_prog['p1'].value = self.last_mouse
-        self.disturb_prog['p2'].value = cur_pos
+        self.disturb_prog["p1"].value = self.last_mouse
+        self.disturb_prog["p2"].value = cur_pos
         self.quad.render(self.disturb_prog)
         self.ctx.disable(moderngl.BLEND)
         self.last_mouse = cur_pos
@@ -200,8 +200,8 @@ class WaterRippleDemo(moderngl_window.WindowConfig):
         # When the window is resized, update simulation textures and uniforms.
         self.sim_width, self.sim_height = width, height
         texel = (1.0 / width, 1.0 / height)
-        self.sim_prog['texel'].value = texel
-        self.render_prog['texel'].value = texel
+        self.sim_prog["texel"].value = texel
+        self.render_prog["texel"].value = texel
 
         # Create the simulation textures and FBOs at the new resolution.
         for i in range(len(self.height_textures)):
@@ -211,7 +211,7 @@ class WaterRippleDemo(moderngl_window.WindowConfig):
         self.fbos = []
         self.height_textures = []
         for i in range(2):
-            tex = self.ctx.texture((width, height), components=2, dtype='f4')
+            tex = self.ctx.texture((width, height), components=2, dtype="f4")
             tex.filter = (moderngl.NEAREST, moderngl.NEAREST)
             fbo = self.ctx.framebuffer(color_attachments=[tex])
             fbo.clear(color=(0.0, 0.0, 0.0, 1.0))
@@ -219,5 +219,5 @@ class WaterRippleDemo(moderngl_window.WindowConfig):
             self.fbos.append(fbo)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     moderngl_window.run_window_config(WaterRippleDemo)
