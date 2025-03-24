@@ -98,6 +98,7 @@ class WaterApp(mglw.WindowConfig):
     gl_version = (3, 3)
     title = "Water Plane with GPU Height Map, Cube Map & Depth-based Transparency"
     window_size = (800, 600)
+    aspect_ratio = None  # Let the window determine the aspect ratio.
     resizable = True
 
     def __init__(self, **kwargs):
@@ -330,7 +331,9 @@ class WaterApp(mglw.WindowConfig):
         self.water_prog['water_opaque_depth'] = 3
 
         self.camera.bind(self.water_prog, self.water_model, mvp_uniform="mvp", pos="camera_pos")
-        self.water_prog["resolution"].value = self.wnd.size
+        x, y, w, h = self.wnd.viewport
+        #self.water_prog["resolution"].value = self.wnd.size
+        self.water_prog["resolution"].value = (w, h)
         self.water_vao.render()
 
     def on_resize(self, width: int, height: int):
@@ -342,6 +345,9 @@ class WaterApp(mglw.WindowConfig):
             depth_attachment=self.offscreen_depth,
         )
         self.water_prog["resolution"].value = (width, height)
+                # Create the camera.
+        self.camera.set_aspect(self.wnd.aspect_ratio)
+
 
 
 def main():
