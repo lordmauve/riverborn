@@ -103,12 +103,12 @@ class WaterApp(mglw.WindowConfig):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.ctx.gc_mode = "auto"
 
         self.terrain = Instance(
-            self.ctx,
             terrain.make_terrain(100, 100, 100, 10, 0.1),
-            load_shader(self.ctx, 'diffuse'),
-            create_noise_texture(self.ctx, color=(0.6, 0.5, 0.4))
+            load_shader('diffuse'),
+            create_noise_texture(color=(0.6, 0.5, 0.4))
         )
 
         # Create the camera.

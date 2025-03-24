@@ -9,8 +9,9 @@ from .shader import load_shader
 from .camera import Camera
 
 
-def create_noise_texture(ctx: moderngl.Context, size: int = 256, color=(1.0, 1.0, 1.0)):
+def create_noise_texture(size: int = 256, color=(1.0, 1.0, 1.0)):
     """Generate a 256x256 texture with Perlin noise."""
+    ctx = mglw.ctx()
     tex_width, tex_height = size, size
     texture_data = np.zeros((tex_height, tex_width, 3), dtype=np.uint8)
     texture_noise_scale = 0.1
@@ -87,14 +88,13 @@ class Instance:
     texture: moderngl.Texture
 
     def __init__(self,
-        ctx: moderngl.Context,
         mesh: terrain.Mesh,
         shader: moderngl.Program,
         texture: moderngl.Texture
     ) -> None:
         self.pos = Vector3([0.0, 0.0, 0.0])
         self.rotation = Quaternion()
-        self.ctx = ctx
+        self.ctx = mglw.ctx()
         self.mesh = mesh
         self.prog = shader
                # Create buffers: vertex buffer and index buffer.
@@ -102,7 +102,7 @@ class Instance:
         self.ibo = self.ctx.buffer(mesh.indices.astype("i4").tobytes())
 
         # Build the shader program.
-        self.prog = load_shader(self.ctx, 'diffuse')
+        self.prog = load_shader('diffuse')
 
         # Create the vertex array object linking attributes.
         self.vao = self.ctx.vertex_array(
