@@ -19,6 +19,7 @@ dependencies = [
 riverborn = "riverborn:main"
 rb-heightfield = "riverborn.heightfield:main"
 rb-water = "riverborn.mgl_terrain:main"
+rb-ripples = "riverborn.ripples:main"
 
 [build-system]
 requires = ["flit_scm>=1.7.0"]
