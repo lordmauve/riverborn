@@ -5,6 +5,7 @@ uniform mat4 mvp;
 uniform mat4 model;
 out vec2 v_uv;
 out vec3 v_world;
+
 void main() {
     v_uv = in_uv;
     vec4 world = model * vec4(in_position, 1.0);

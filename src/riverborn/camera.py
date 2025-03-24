@@ -4,8 +4,8 @@ from pyrr import Matrix44, Vector3
 
 class Camera:
     def __init__(self, eye, target, up, fov=70.0, aspect=1.0, near=0.1, far=1000.0):
-        self.eye = Vector3(eye)
-        self.target = Vector3(target)
+        self.eye = Vector3(eye, dtype='f4')
+        self.target = Vector3(target, dtype='f4')
         self.up = Vector3(up)
         self.fov = fov
         self.aspect = aspect
@@ -17,9 +17,10 @@ class Camera:
         self._proj_matrix = None
 
     def update_matrices(self):
-        self._view_matrix = Matrix44.look_at(self.eye, self.target, self.up)
+        self._view_matrix = Matrix44.look_at(self.eye, self.target, self.up, dtype='f4')
         self._proj_matrix = Matrix44.perspective_projection(
-            self.fov, self.aspect, self.near, self.far
+            self.fov, self.aspect, self.near, self.far,
+            dtype='f4',
         )
         self._dirty = False
 
@@ -48,9 +49,9 @@ class Camera:
         """
         view = self.get_view_matrix()
         proj = self.get_proj_matrix()
-        mvp = proj * view * model
+        mvp = proj * view * model.astype('f4')
 
-        prog[mvp_uniform].write(mvp.astype("f4").tobytes())
+        prog[mvp_uniform].write(mvp)
 
         if normal_matrix:
             # Compute the normal matrix (inverse-transpose of the model's upper 3x3).

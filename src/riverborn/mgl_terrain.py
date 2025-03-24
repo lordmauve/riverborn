@@ -70,30 +70,6 @@ def load_env_map(ctx: moderngl.Context) -> moderngl.TextureCube:
     return cube
 
 
-# Helper: create a dummy cube map (each face gets a solid colour).
-def create_dummy_cubemap(ctx, size=64):
-    # Define six face colors for a simple sky-like environment.
-    face_colors = [
-        [135, 206, 235],  # Positive X – light sky blue
-        [135, 206, 235],  # Negative X
-        [135, 206, 250],  # Positive Y – slightly different blue
-        [100, 149, 237],  # Negative Y
-        [70, 130, 180],  # Positive Z
-        [70, 130, 180],  # Negative Z
-    ]
-    faces = []
-    for color in face_colors:
-        # Create a face filled with the given color.
-        face = np.full((size, size, 3), color, dtype=np.uint8)
-        faces.append(face.tobytes())
-    # Create a cube map texture.
-    cube = ctx.texture_cube((size, size), 3, data=None)
-    for i in range(6):
-        cube.write(i, faces[i])
-    cube.build_mipmaps()
-    return cube
-
-
 class WaterApp(mglw.WindowConfig):
     gl_version = (3, 3)
     title = "Water Plane with GPU Height Map, Cube Map & Depth-based Transparency"
@@ -122,13 +98,8 @@ class WaterApp(mglw.WindowConfig):
             far=1000.0,
         )
 
-        # ------------------------------
-        # Offscreen framebuffer for water-bottom pass.
-        # ------------------------------
-        self.offscreen_color = self.ctx.texture(self.wnd.size, components=4)
         self.offscreen_depth = self.ctx.depth_texture(self.wnd.size)
         self.offscreen_fbo = self.ctx.framebuffer(
-            color_attachments=[self.offscreen_color],
             depth_attachment=self.offscreen_depth,
         )
 
@@ -163,9 +134,7 @@ class WaterApp(mglw.WindowConfig):
         self.height_map_tex.use(location=0)
         self.water_prog["height_map"].value = 0
 
-        # ------------------------------
-        # Create a dummy environment cube map.
-        # ------------------------------
+
         self.env_cube = load_env_map(self.ctx)
         self.env_cube.use(location=1)
         self.water_prog["env_cube"].value = 1
@@ -230,15 +199,13 @@ class WaterApp(mglw.WindowConfig):
 
     def on_resize(self, width: int, height: int):
         # When the window is resized, update the offscreen framebuffer and resolution uniform.
-        self.offscreen_color = self.ctx.texture((width, height), components=4)
         self.offscreen_depth = self.ctx.depth_texture((width, height))
         self.offscreen_fbo = self.ctx.framebuffer(
-            color_attachments=[self.offscreen_color],
             depth_attachment=self.offscreen_depth,
         )
         self.water_prog["resolution"].value = (width, height)
                 # Create the camera.
-        self.camera.set_aspect(self.wnd.aspect_ratio)
+        self.camera.set_aspect(width / height)
         self.ctx.gc()
 
 
