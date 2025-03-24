@@ -132,41 +132,6 @@ class WaterApp(mglw.WindowConfig):
             depth_attachment=self.offscreen_depth,
         )
 
-        # ------------------------------
-        # Create geometries
-        # ------------------------------
-        # Water-bottom geometry: a large quad (simulate the underwater terrain)
-        self.bottom_size = 100.0
-        bottom_vertices, bottom_indices = create_quad(self.bottom_size)
-        self.bottom_vbo = self.ctx.buffer(bottom_vertices.tobytes())
-        self.bottom_ibo = self.ctx.buffer(bottom_indices.tobytes())
-        self.bottom_vao = self.ctx.vertex_array(
-            self.ctx.program(
-                vertex_shader="""
-                    #version 330
-                    in vec3 in_position;
-                    in vec2 in_uv;
-                    uniform mat4 mvp;
-                    varying vec2 v_uv;
-                    void main() {
-                        v_uv = in_uv;
-                        gl_Position = mvp * vec4(in_position, 1.0);
-                    }
-                """,
-                fragment_shader="""
-                    #version 330
-                    varying vec2 v_uv;
-                    out vec4 f_color;
-                    void main() {
-                        // A simple brownish colour for the bottom.
-                        f_color = vec4(0.2, 0.15, 0.1, 1.0);
-                    }
-                """,
-            ),
-            [(self.bottom_vbo, "3f 2x4", "in_position")],
-            index_buffer=self.bottom_ibo,
-        )
-
         # Water plane geometry: a quad covering the same region.
         self.water_size = 100.0
         water_vertices, water_indices = create_quad(self.water_size)
@@ -176,78 +141,12 @@ class WaterApp(mglw.WindowConfig):
         # ------------------------------
         # Create water shader program.
         # ------------------------------
-        self.water_prog = self.ctx.program(
-            vertex_shader="""
-                #version 330
-                in vec3 in_position;
-                in vec2 in_uv;
-                uniform mat4 mvp;
-                uniform mat4 model;
-                out vec2 v_uv;
-                out vec3 v_world;
-                void main() {
-                    v_uv = in_uv;
-                    vec4 world = model * vec4(in_position, 1.0);
-                    v_world = world.xyz;
-                    gl_Position = mvp * vec4(in_position, 1.0);
-                }
-            """,
-            fragment_shader="""
-                #version 330
-                // Water plane fragment shader.
-                in vec2 v_uv;
-                in vec3 v_world;
-                uniform sampler2D height_map;   // Height map for ripples.
-                uniform samplerCube env_cube;     // Environment cube map.
-                uniform sampler2D depth_tex;      // Depth texture from water-bottom pass.
-                uniform vec3 camera_pos;
-                uniform vec2 resolution;
-                uniform float near;
-                uniform float far;
-                uniform vec3 base_water;
-                uniform float water_opaque_depth;
-                out vec4 f_color;
-
-                // Function to linearize a non-linear depth value.
-                float linearizeDepth(float depth) {
-                    return (2.0 * near * far) / (far + near - depth * (far - near));
-                }
-
-                void main() {
-                    // --- Compute perturbed normal from the height map.
-                    float h = texture(height_map, v_uv).r;
-                    // Derivatives of the height value (for a simple normal perturbation).
-                    float dFdx_h = dFdx(h);
-                    float dFdy_h = dFdy(h);
-                    float ripple_scale = 1.0;
-                    vec3 perturbed_normal = normalize(vec3(-dFdx_h * ripple_scale, 1.0, -dFdy_h * ripple_scale));
-
-                    // --- Fresnel term.
-                    vec3 view_dir = normalize(camera_pos - v_world);
-                    float fresnel = pow(1.0 - max(dot(perturbed_normal, view_dir), 0.0), 5.0);
-
-                    // --- Reflection from the environment.
-                    vec3 refl_dir = reflect(-view_dir, perturbed_normal);
-                    vec4 refl_color = vec4(texture(env_cube, refl_dir).rgb, 1.0);
-
-                    // --- Depth-based transparency.
-                    // Compute screen-space coordinates.
-                    vec2 screen_uv = gl_FragCoord.xy / resolution;
-                    // Sample the water-bottom depth (non-linear depth).
-                    float scene_depth = texture(depth_tex, screen_uv).r;
-                    // Linearize the depths.
-                    float scene_lin = linearizeDepth(scene_depth);
-                    float water_lin = linearizeDepth(gl_FragCoord.z);
-                    float depth_diff = scene_lin - water_lin;
-                    // When the water is shallow (small depth difference) we want more transparency.
-                    float shallow = clamp(depth_diff / water_opaque_depth, 0.0, 1.0);
-
-                    // Mix: reflection atop base water colour.
-                    vec4 diffuse = vec4(base_water, shallow);
-                    f_color = mix(diffuse, refl_color, fresnel);
-                }
-            """,
-        )
+        self.water_prog = load_shader("water")
+        uniforms = {
+            name: self.water_prog[name] for name in self.water_prog
+            if isinstance(self.water_prog[name], moderngl.Uniform)
+        }
+        print(uniforms)
         # Create a VAO for the water plane.
         self.water_vao = self.ctx.vertex_array(
             self.water_prog,
@@ -284,11 +183,9 @@ class WaterApp(mglw.WindowConfig):
 
         # Define model matrices.
         # Water plane: a translation upward to water_level.
-        self.water_model = Matrix44.from_translation([0.0, 1.0, 0.0])
+        self.water_model = Matrix44.from_translation([0.0, 1.0, 0.0], dtype='f4')
         # Water-bottom: assume at y = 0.
-        self.bottom_model = Matrix44.from_translation([0.0, 0.0, 0.0])
-        self.water_prog["model"].write(self.water_model.astype("f4").tobytes())
-        self.bottom_vao.program["mvp"].write(Matrix44.identity(dtype="f4"))
+        self.water_prog["model"].write(self.water_model)
 
         # Set up a basic camera.
         self.camera_pos = Vector3([0.0, 50.0, 100.0])
@@ -308,11 +205,6 @@ class WaterApp(mglw.WindowConfig):
         self.offscreen_fbo.use()
         self.ctx.clear(0.0, 0.0, 0.0, 1.0)
         self.terrain.render(self.camera)
-        # For water bottom, we simply compute an mvp.
-        # bottom_model = self.bottom_model
-        # mvp_bottom = proj * view * bottom_model
-        # self.bottom_vao.program["mvp"].write(mvp_bottom.astype("f4").tobytes())
-        # self.bottom_vao.render()
 
         # ------------------------------
         # Second pass: Render water plane to the default framebuffer.
@@ -347,6 +239,7 @@ class WaterApp(mglw.WindowConfig):
         self.water_prog["resolution"].value = (width, height)
                 # Create the camera.
         self.camera.set_aspect(self.wnd.aspect_ratio)
+        self.ctx.gc()
 
 
 
