@@ -75,9 +75,9 @@ def load_env_map(ctx: moderngl.Context) -> moderngl.TextureCube:
 class WaterApp(mglw.WindowConfig):
     gl_version = (3, 3)
     title = "Water Plane with GPU Height Map, Cube Map & Depth-based Transparency"
-    window_size = (800, 600)
+    window_size = (1920, 1080)
     aspect_ratio = None  # Let the window determine the aspect ratio.
-    resizable = True
+    resizable = False
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -191,6 +191,8 @@ class WaterApp(mglw.WindowConfig):
         x, y, w, h = self.wnd.viewport
         self.water_prog["resolution"].value = self.wnd.size
         self.water_vao.render()
+        if self.recorder is not None:
+            self.recorder._vid_frame()
 
     def on_resize(self, width: int, height: int):
         # When the window is resized, update the offscreen framebuffer and resolution uniform.
@@ -233,6 +235,25 @@ class WaterApp(mglw.WindowConfig):
     def on_mouse_release_event(self, x, y, button):
         self.last_mouse = None
 
+    recorder = None
+
+    def on_key_event(self, key, action, modifiers):
+
+        op = 'press' if action == self.wnd.keys.ACTION_PRESS else 'release'
+        keys = self.wnd.keys
+        match op, key, modifiers.shift:
+            case ('press', keys.ESCAPE, _):
+                sys.exit()
+
+            case ('press', keys.F12, False):
+                from .screenshot import screenshot
+                screenshot()
+
+            case ('press', keys.F12, True):
+                if self.recorder is None:
+                    from .screenshot import VideoRecorder
+                    self.recorder = VideoRecorder()
+                self.recorder.toggle_recording()
 
 def main():
     mglw.run_window_config(WaterApp)
