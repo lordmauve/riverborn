@@ -1,7 +1,9 @@
 import importlib.resources
 from itertools import product
+from pathlib import Path
 import moderngl
 import moderngl_window as mglw
+from moderngl_window import scene
 import numpy as np
 import noise
 from pyrr import Matrix44, Vector3
@@ -72,12 +74,65 @@ def load_env_map(ctx: moderngl.Context) -> moderngl.TextureCube:
     return cube
 
 
+with importlib.resources.as_file(importlib.resources.files() / 'resources') as resource_dir:
+    pass
+
+
+class TextureAlphaProgram(scene.MeshProgram):
+
+    def __init__(self) -> None:
+        super().__init__(program=load_shader('texture_alpha'))
+
+    def draw(
+        self,
+        mesh: scene.Mesh,
+        projection_matrix: Matrix44,
+        model_matrix: Matrix44,
+        camera_matrix: Matrix44,
+        time: float = 0.0,
+    ) -> None:
+        assert self.program is not None, "There is no program to draw"
+        assert mesh.vao is not None, "There is no vao to render"
+        assert mesh.material is not None, "There is no material to render"
+        assert (
+            mesh.material.mat_texture is not None
+        ), "The material does not have a texture to render"
+        assert (
+            mesh.material.mat_texture.texture is not None
+        ), "The material texture is not linked to a texture, so it can not be rendered"
+
+        mesh.material.mat_texture.texture.use()
+        self.program["texture0"].value = 0
+        self.program["m_proj"].write(projection_matrix)
+        self.program["m_model"].write(model_matrix)
+        self.program["m_cam"].write(camera_matrix)
+        mesh.vao.render(self.program)
+
+    def apply(self, mesh: scene.Mesh) -> scene.MeshProgram | None:
+        if not mesh.material:
+            return None
+
+        if not mesh.attributes.get("NORMAL"):
+            return None
+
+        if not mesh.attributes.get("TEXCOORD_0"):
+            return None
+
+        if mesh.material.mat_texture is not None:
+            return self
+
+        return None
+
+
 class WaterApp(mglw.WindowConfig):
     gl_version = (3, 3)
     title = "Water Plane with GPU Height Map, Cube Map & Depth-based Transparency"
     window_size = (1920, 1080)
     aspect_ratio = None  # Let the window determine the aspect ratio.
     resizable = False
+
+    # FIXME: need to use package data
+    resource_dir = Path(__file__).parent.parent.parent / 'assets_source/multi-stylized-grass'
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -90,6 +145,11 @@ class WaterApp(mglw.WindowConfig):
             load_shader('diffuse'),
             create_noise_texture(1024, color=(0.6, 0.5, 0.4))
         )
+
+        self.plant = self.load_scene('14.obj')
+        self.plant.prepare()
+        self.plant.apply_mesh_programs([TextureAlphaProgram()])
+        self.plant.matrix *= Matrix44.from_scale([0.1 , 0.1, 0.1], dtype='f4')
 
         # Create the camera.
         self.camera = Camera(
@@ -137,8 +197,6 @@ class WaterApp(mglw.WindowConfig):
             1024,
         )
 
-
-
         self.env_cube = load_env_map(self.ctx)
 
         # Define model matrices.
@@ -170,6 +228,8 @@ class WaterApp(mglw.WindowConfig):
         self.ctx.screen.use()
         self.ctx.clear(0.2, 0.3, 0.4, 1.0)
         self.terrain.render(self.camera)
+
+        self.plant.draw(self.camera.get_proj_matrix(), self.camera.get_view_matrix())
 
         self.water_prog["env_cube"].value = 1
         self.water_prog["depth_tex"].value = 2

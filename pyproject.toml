@@ -5,10 +5,9 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "glfw>=2.8.0",
     "imageio>=2.37.0",
     "moderngl>=5.12.0",
-    "moderngl-window>=3.1.1",
+    "moderngl-window[glfw,pywavefront]>=3.1.1",
     "noise>=1.2.2",
     "numpy>=2.2.4",
     "pygfx>=0.9.0",
