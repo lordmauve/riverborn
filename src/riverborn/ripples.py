@@ -1,7 +1,12 @@
+from contextlib import contextmanager
+from typing import Generator
 import moderngl
-import moderngl_window
+import moderngl_window as mglw
 from moderngl_window import geometry
+import moderngl_window
 import numpy as np
+
+from riverborn.blending import blend_func
 
 from .shader import load_shader
 
@@ -12,9 +17,9 @@ class WaterSimulation:
     Initializes simulation textures, framebuffers, shaders, and provides methods
     to update the simulation, render the water surface, and apply disturbances.
     """
-    def __init__(self, ctx, width, height, quad):
-        self.ctx = ctx
-        self.quad = quad
+    def __init__(self, width, height):
+        self.ctx = mglw.ctx()
+        self.quad = geometry.quad_fs()
         self.width = width
         self.height = height
         self.current_idx = 0  # index for the "current" texture
@@ -76,13 +81,18 @@ class WaterSimulation:
         # Swap current and previous indices.
         self.current_idx, self.prev_idx = self.prev_idx, self.current_idx
 
+    @property
+    def texture(self) -> moderngl.Texture:
+        """Get the current height texture."""
+        return self.height_textures[self.current_idx]
+
     def render(self):
         """
         Render the water surface to the active framebuffer (usually the screen).
         Uses a scope for consistency.
         """
         with self.ctx.scope():
-            self.height_textures[self.current_idx].use(location=0)
+            self.texture.use(location=0)
             self.render_prog["height_tex"].value = 0
             self.quad.render(self.render_prog)
 
@@ -95,13 +105,13 @@ class WaterSimulation:
         target_fbo = self.fbos[self.current_idx]
         with self.ctx.scope(framebuffer=target_fbo, enable_only=moderngl.BLEND):
             # Set blend function to additive blending (restored after the scope).
-            self.ctx.blend_func = (moderngl.SRC_ALPHA, moderngl.ONE)
-            self.disturb_prog["p1"].value = p1
-            self.disturb_prog["p2"].value = p2
-            self.quad.render(self.disturb_prog)
+            with blend_func(moderngl.SRC_ALPHA, moderngl.ONE):
+                self.disturb_prog["p1"].value = p1
+                self.disturb_prog["p2"].value = p2
+                self.quad.render(self.disturb_prog)
 
 
-class WaterRippleDemo(moderngl_window.WindowConfig):
+class WaterRippleDemo(mglw.WindowConfig):
     """
     Demo window that uses WaterSimulation to perform a GPU water ripple simulation.
     """
@@ -114,9 +124,8 @@ class WaterRippleDemo(moderngl_window.WindowConfig):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # Create a full-screen quad.
-        self.quad = geometry.quad_fs()
         # Create the WaterSimulation instance.
-        self.water_sim = WaterSimulation(self.ctx, self.wnd.size[0], self.wnd.size[1], self.quad)
+        self.water_sim = WaterSimulation(self.wnd.size[0], self.wnd.size[1])
         # For mouse drawing: store last mouse position in texture coordinates (or None)
         self.last_mouse = None
 
@@ -154,4 +163,4 @@ class WaterRippleDemo(moderngl_window.WindowConfig):
 
 
 def main():
-    moderngl_window.run_window_config(WaterRippleDemo)
+    mglw.run_window_config(WaterRippleDemo)
