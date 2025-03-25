@@ -1,6 +1,7 @@
 import importlib.resources
 from itertools import product
 from pathlib import Path
+import sys
 import moderngl
 import moderngl_window as mglw
 from moderngl_window import scene
@@ -8,6 +9,8 @@ import numpy as np
 import noise
 from pyrr import Matrix44, Vector3
 import imageio as iio
+from wasabigeom import vec2
+import glm
 
 from riverborn import picking, terrain
 from riverborn.blending import blend_func
@@ -132,7 +135,7 @@ class WaterApp(mglw.WindowConfig):
     resizable = False
 
     # FIXME: need to use package data
-    resource_dir = Path(__file__).parent.parent.parent / 'assets_source/multi-stylized-grass'
+    resource_dir = Path(__file__).parent.parent.parent / 'assets_source/'
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -146,10 +149,15 @@ class WaterApp(mglw.WindowConfig):
             create_noise_texture(1024, color=(0.6, 0.5, 0.4))
         )
 
-        self.plant = self.load_scene('14.obj')
+        self.plant = self.load_scene('multi-stylized-grass/14.obj')
         self.plant.prepare()
         self.plant.apply_mesh_programs([TextureAlphaProgram()])
+
+        self.canoe = self.load_scene('kenney-nature-kit/canoe.glb')
+        self.canoe.prepare()
+
         self.plant.matrix *= Matrix44.from_scale([0.1 , 0.1, 0.1], dtype='f4')
+        self.canoe.matrix *= Matrix44.from_scale([10, 10, 10], dtype='f4')
 
         # Create the camera.
         self.camera = Camera(
@@ -209,9 +217,46 @@ class WaterApp(mglw.WindowConfig):
         self.camera_pos = Vector3([0.0, 50.0, 100.0])
         self.look_at = Vector3([0.0, 0.0, 0.0])
 
+    canoe_pos = vec2(0, 0)
+    canoe_rot = 0
+    canoe_vel = vec2(0, 0)
+    canoe_angular_vel = 0
+    canoe_pos3 = glm.vec3()
+    CANOE_SIZE = 5
+
+    def paddle(self, side: float) -> None:
+        """Paddle in the water."""
+        self.canoe_angular_vel += side * 0.5
+        self.canoe_vel += vec2(0, 2).rotated(-self.canoe_rot)
+
+    def update(self, dt: float) -> None:
+        self.canoe_vel *= 0.5 ** dt
+        self.canoe_pos += self.canoe_vel * dt
+        self.canoe_angular_vel *= 0.1 ** dt
+        self.canoe_rot += self.canoe_angular_vel * dt
+
+        prev_pos = self.canoe_pos3
+        self.canoe_pos3 = glm.vec3(self.canoe_pos.x, 1, self.canoe_pos.y)
+        m = self.canoe.matrix = glm.scale(
+            glm.rotate(
+                glm.translate(self.canoe_pos3),
+                self.canoe_rot,
+                glm.vec3(0, 1, 0),
+            ), glm.vec3(self.CANOE_SIZE)
+        )
+
+        back = m * glm.vec3(0, 0, 0.4)
+        front = m * glm.vec3(0, 0, -0.4)
+
+        self.water_sim.disturb(
+            self.pos_to_water(back),
+            self.pos_to_water(front)
+        )
 
     def on_render(self, time, frame_time):
+        self.update(frame_time)
         self.camera.set_aspect(self.wnd.aspect_ratio)
+        self.camera.look_at(self.canoe_pos3)
 
         self.water_sim.simulate()
         # ------------------------------
@@ -229,7 +274,9 @@ class WaterApp(mglw.WindowConfig):
         self.ctx.clear(0.2, 0.3, 0.4, 1.0)
         self.terrain.render(self.camera)
 
-        self.plant.draw(self.camera.get_proj_matrix(), self.camera.get_view_matrix())
+        with self.ctx.scope(enable_only=moderngl.CULL_FACE | moderngl.DEPTH_TEST):
+            self.plant.draw(self.camera.get_proj_matrix(), self.camera.get_view_matrix())
+            self.canoe.draw(self.camera.get_proj_matrix(), self.camera.get_view_matrix())
 
         self.water_prog["env_cube"].value = 1
         self.water_prog["depth_tex"].value = 2
@@ -250,7 +297,8 @@ class WaterApp(mglw.WindowConfig):
         self.camera.bind(self.water_prog, self.water_model, mvp_uniform="mvp", pos="camera_pos")
         x, y, w, h = self.wnd.viewport
         self.water_prog["resolution"].value = self.wnd.size
-        self.water_vao.render()
+        with self.ctx.scope(enable_only=moderngl.BLEND | moderngl.DEPTH_TEST):
+            self.water_vao.render()
         if self.recorder is not None:
             self.recorder._vid_frame()
 
@@ -267,19 +315,24 @@ class WaterApp(mglw.WindowConfig):
 
     last_mouse: tuple[float, float] | None = None
 
-    def screen_to_ground(self, x, y) -> tuple[float, float] | None:
+    def screen_to_ground(self, x, y) -> glm.vec3 | None:
         width, height = self.wnd.size
         ray = picking.get_mouse_ray(self.camera, x, y, width, height)
         intersection = picking.intersect_ray_plane(ray, 0.0)
         if intersection is None:
             return None
-        cur_pos = (intersection[0] / self.water_size, intersection[2] / self.water_size)
+
+        return intersection
+
+    def pos_to_water(self, pos: glm.vec3) -> tuple[float, float]:
+        cur_pos = (pos[0] / self.water_size, pos[2] / self.water_size)
         cur_pos = (cur_pos[0] * 0.5 + 0.5, cur_pos[1] * 0.5 + 0.5)
         return cur_pos
 
     def on_mouse_drag_event(self, x, y, dx, dy):
         # Convert mouse coordinates (window: origin top-left) to texture coordinates (origin bottom-left)
-        cur_pos = self.screen_to_ground(x, y)
+        intersection = self.screen_to_ground(x, y)
+        cur_pos = self.pos_to_water(intersection) if intersection else None
 
         if cur_pos is None:
             self.last_mouse = None
@@ -318,6 +371,12 @@ class WaterApp(mglw.WindowConfig):
                     from .screenshot import VideoRecorder
                     self.recorder = VideoRecorder()
                 self.recorder.toggle_recording()
+
+            case 'press', keys.LEFT, _:
+                self.paddle(-1)
+
+            case 'press', keys.RIGHT, _:
+                self.paddle(1)
 
 def main():
     mglw.run_window_config(WaterApp)

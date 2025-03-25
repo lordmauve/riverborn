@@ -359,6 +359,7 @@ dependencies = [
     { name = "numpy" },
     { name = "pygfx" },
     { name = "pyrr" },
+    { name = "wasabi-geom" },
 ]
 
 [package.metadata]
@@ -370,6 +371,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.2.4" },
     { name = "pygfx", specifier = ">=0.9.0" },
     { name = "pyrr", specifier = ">=0.10.3" },
+    { name = "wasabi-geom", specifier = ">=2.3.0" },
 ]
 
 [[package]]
@@ -403,6 +405,22 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/bf/ec/5a24bfcf4837641f4a93188b8dfab3cb7eb10d0ff4cd1b7cbb88d8225053/uharfbuzz-0.46.0-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:cecfe42901468d046782f48b1165b419b08ee21b2e3e2fdae5fcd8f6dc147177", size = 14374065 },
     { url = "https://files.pythonhosted.org/packages/6b/12/92d35885c76647a42b989d8cc92054006ecab57d9e7814bec3e31d74bf44/uharfbuzz-0.46.0-cp313-cp313-win32.whl", hash = "sha256:deac89993d39feb08fa62d07854cf4ea1180c2c9a30c9274440df8ed96debc85", size = 930972 },
     { url = "https://files.pythonhosted.org/packages/ba/55/44fe4de8fe367c451f59c85289b6365c0f36153416ee79b2f7754455e1f3/uharfbuzz-0.46.0-cp313-cp313-win_amd64.whl", hash = "sha256:b82b7bc85e4682195883b32435a075441593b03e2fb2ba13467669b25dc17a06", size = 1163916 },
+]
+
+[[package]]
+name = "wasabi-geom"
+version = "2.3.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a0/20/d61ce69e3684ad5101852212244443374b2d1c75d890d4bd211a16fcf4cd/wasabi_geom-2.3.0.tar.gz", hash = "sha256:56e9da51a3a0b1a673bd40f3f9800256d951fbfd05d093e6935881c824248dfd", size = 25899 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e0/7b/4aa249e0fffb6e5d2760b225b81fe61ecf8422426a985e765779f478da90/wasabi_geom-2.3.0-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:0d8dd5daf7f37a9cb475a5f87d8dd3b8b820fb7ef7bb2e24dce2cf2e01574030", size = 304291 },
+    { url = "https://files.pythonhosted.org/packages/34/19/eb193589e33110d6f333651e7ed3ea2343131d176a072bd700e066c881ec/wasabi_geom-2.3.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:cd132d06de037361ef66706aadf3c69766b2b86da377cb15c3fba0ef51a74c9d", size = 270788 },
+    { url = "https://files.pythonhosted.org/packages/d7/d9/5c6fa2d23c889b6f45fbb508151f58d283aa741fdd2e66f8fce220c36ddd/wasabi_geom-2.3.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:1d90db3acd33b0f7cac2e8ac9bd094917040bf947275e1df08e19eef1ce25bf5", size = 1820413 },
+    { url = "https://files.pythonhosted.org/packages/16/0a/1c6d070137497f3b9496d9fbeb2ed29734d31431664f5e99c008bdf317c3/wasabi_geom-2.3.0-cp313-cp313-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:6ddb3364f8a46c5962b6d8da353871249c137afac13280787dbdcb2730bad0fa", size = 1701189 },
+    { url = "https://files.pythonhosted.org/packages/b4/b7/1d37de59c16cc324868c1f3952dd8a23470852c6cfc24a26cd64e45b5686/wasabi_geom-2.3.0-cp313-cp313-musllinux_1_2_i686.whl", hash = "sha256:209cf6968c49a704e7ff338d3471e41bd67516d5dbcf2b3c5097b95ae0c0f61e", size = 1745846 },
+    { url = "https://files.pythonhosted.org/packages/8d/af/b00a607c22cb0a4e77e49f3d1c773e00e008d1eb15b4a4d686140647e51b/wasabi_geom-2.3.0-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:37a5345a11c86f4e840050d111dc7a8216dc63847fb1fbd930b5cd019e9477e4", size = 1833187 },
+    { url = "https://files.pythonhosted.org/packages/ab/39/f7c327d8793cb8d0a55ad2ffcf348a171197f49b770fe2bedf6b169608fd/wasabi_geom-2.3.0-cp313-cp313-win32.whl", hash = "sha256:bbb9e1b5881c35609524036c1e8e4219cfb0d79b71ffa36669102d827fabd8a2", size = 212919 },
+    { url = "https://files.pythonhosted.org/packages/58/65/f0f947cac067934e3b1b6e09f33bd77cfc4181043cc203cbb2b7f7f27248/wasabi_geom-2.3.0-cp313-cp313-win_amd64.whl", hash = "sha256:df02855c3658acc72eff7a1952e9fcc908eba4dad3147c0499bf12f5af484e2d", size = 252129 },
 ]
 
 [[package]]

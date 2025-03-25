@@ -24,6 +24,10 @@ class Camera:
         )
         self._dirty = False
 
+    def look_at(self, target):
+        self.target[:] = target
+        self._dirty = True
+
     def get_view_matrix(self):
         if self._dirty or self._view_matrix is None:
             self.update_matrices()

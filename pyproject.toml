@@ -12,6 +12,7 @@ dependencies = [
     "numpy>=2.2.4",
     "pygfx>=0.9.0",
     "pyrr>=0.10.3",
+    "wasabi-geom>=2.3.0",
 ]
 
 [project.scripts]
