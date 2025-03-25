@@ -88,12 +88,12 @@ class WaterApp(mglw.WindowConfig):
         self.terrain = Instance(
             terrain.make_terrain(100, 100, 100, 10, 0.1),
             load_shader('diffuse'),
-            create_noise_texture(color=(0.6, 0.5, 0.4))
+            create_noise_texture(1024, color=(0.6, 0.5, 0.4))
         )
 
         # Create the camera.
         self.camera = Camera(
-            eye=[0.0, 50.0, 100.0],
+            eye=[0.0, 20.0, 50.0],
             target=[0.0, 0.0, 0.0],
             up=[0.0, 1.0, 0.0],
             fov=70.0,
