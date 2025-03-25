@@ -267,18 +267,23 @@ class WaterApp(mglw.WindowConfig):
 
     last_mouse: tuple[float, float] | None = None
 
-    def on_mouse_drag_event(self, x, y, dx, dy):
-        # Convert mouse coordinates (window: origin top-left) to texture coordinates (origin bottom-left)
+    def screen_to_ground(self, x, y) -> tuple[float, float] | None:
         width, height = self.wnd.size
-
         ray = picking.get_mouse_ray(self.camera, x, y, width, height)
         intersection = picking.intersect_ray_plane(ray, 0.0)
         if intersection is None:
-            self.last_mouse = None
-            return
-
+            return None
         cur_pos = (intersection[0] / self.water_size, intersection[2] / self.water_size)
         cur_pos = (cur_pos[0] * 0.5 + 0.5, cur_pos[1] * 0.5 + 0.5)
+        return cur_pos
+
+    def on_mouse_drag_event(self, x, y, dx, dy):
+        # Convert mouse coordinates (window: origin top-left) to texture coordinates (origin bottom-left)
+        cur_pos = self.screen_to_ground(x, y)
+
+        if cur_pos is None:
+            self.last_mouse = None
+            return
 
         if self.last_mouse is None:
             self.last_mouse = cur_pos
@@ -289,8 +294,7 @@ class WaterApp(mglw.WindowConfig):
 
     def on_mouse_press_event(self, x, y, button):
         # Record the initial mouse position in texture coordinates.
-        width, height = self.wnd.size
-        self.last_mouse = (x / width, 1 - y / height)
+        self.last_mouse = self.screen_to_ground(x, y)
 
     def on_mouse_release_event(self, x, y, button):
         self.last_mouse = None
