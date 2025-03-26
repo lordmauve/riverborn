@@ -15,13 +15,19 @@ The system supports:
 """
 
 import importlib.resources
+from pathlib import Path
+import imageio
 import pywavefront
 import moderngl
+import moderngl_window as mglw
 import numpy as np
 import glm
 import random
 import math
 from typing import List, Dict
+
+from riverborn.camera import Camera
+from riverborn.shader import load_shader
 
 
 class Model:
@@ -38,6 +44,9 @@ class Model:
         instance_count: Number of active instances
         instances_dirty: Flag indicating whether GPU buffer needs update
     """
+
+    textures = {}
+
     def __init__(self, mesh: pywavefront.Wavefront, ctx: moderngl.Context, program: moderngl.Program, capacity: int = 100) -> None:
         """
         Initialize the model by creating VAOs for each mesh part and reserving
@@ -54,7 +63,7 @@ class Model:
         self.parts = []
         self.instance_capacity = capacity
         self.instance_count = 0
-        self.instance_matrices = np.zeros((capacity, 16), dtype='f4')
+        self.instance_matrices = np.zeros((capacity, 4, 4), dtype='f4')
         self.instances_dirty = False
         self.instance_buffer = ctx.buffer(reserve=capacity * 16 * 4)
 
@@ -63,20 +72,56 @@ class Model:
             for material in mesh_obj.materials:
                 vertices = np.array(material.vertices, dtype='f4')
                 vbo = ctx.buffer(vertices.tobytes())
+                if hasattr(material, 'texture'):
+                    path = Path(material.texture.path).name
+                    texture = {'texture': self.load_texture(path)}
+                else:
+                    texture = {}
+
                 if hasattr(material, 'faces') and material.faces:
                     indices = np.array([i for face in material.faces for i in face], dtype='i4')
                     ibo = ctx.buffer(indices.tobytes())
                     vao = ctx.vertex_array(program, [
                         (vbo, '3f 3f 2f', 'in_position', 'in_normal', 'in_texcoord_0'),
-                        (self.instance_buffer, '4f 4f 4f 4f/i', 'instance_model')
+                        (self.instance_buffer, '16f4/i', 'instance_model')
                     ], ibo)
-                    self.parts.append({"vbo": vbo, "ibo": ibo, "vao": vao, "indexed": True})
+                    self.parts.append({
+                        "vbo": vbo, "ibo": ibo, "vao": vao, "indexed": True,
+                        **texture
+                    })
                 else:
                     vao = ctx.vertex_array(program, [
                         (vbo, '3f 3f 2f', 'in_position', 'in_normal', 'in_texcoord_0'),
-                        (self.instance_buffer, '4f 4f 4f 4f/i', 'instance_model')
+                        (self.instance_buffer, '16f4/i', 'instance_model')
                     ])
-                    self.parts.append({"vbo": vbo, "vao": vao, "indexed": False})
+                    self.parts.append({
+                        "vbo": vbo,
+                        "vao": vao,
+                        "indexed": False,
+                        **texture
+                    })
+
+    def load_texture(self, path: str) -> moderngl.Texture:
+        """Load and create a ModernGL texture from an image file."""
+        if path in self.textures:
+            return self.textures[path]
+
+        file = importlib.resources.files('riverborn') / f"models/{path}"
+        # Read image using imageio
+        with file.open('rb') as f:
+            image = imageio.imread(f)
+        if image.shape[2] == 3:  # Convert RGB to RGBA
+            rgba = np.zeros((image.shape[0], image.shape[1], 4), dtype=np.uint8)
+            rgba[..., :3] = image
+            rgba[..., 3] = 255
+            image = rgba
+
+        # Create ModernGL texture
+        texture = self.ctx.texture(image.shape[1::-1], 4, image.tobytes())
+        texture.filter = (moderngl.LINEAR, moderngl.LINEAR)
+        texture.build_mipmaps()
+        self.textures[path] = texture
+        return texture
 
     def add_instance(self, matrix: glm.mat4) -> int:
         """
@@ -93,7 +138,7 @@ class Model:
             self.instance_matrices.resize((self.instance_capacity, 16), refcheck=False)
             self.instance_buffer.orphan(size=self.instance_capacity * 16 * 4)
         index = self.instance_count
-        self.instance_matrices[index] = np.array(matrix, dtype='f4').flatten()
+        self.instance_matrices[index] = matrix
         self.instance_count += 1
         self.instances_dirty = True
         return index
@@ -106,10 +151,10 @@ class Model:
             index: Index into the instance matrix buffer
             matrix: New transformation matrix
         """
-        self.instance_matrices[index] = np.array(matrix, dtype='f4').flatten()
+        self.instance_matrices[index] = matrix
         self.instances_dirty = True
 
-    def draw(self, m_proj: glm.mat4, m_cam: glm.mat4, sun_dir: glm.vec3) -> None:
+    def draw(self, camera: Camera, sun_dir: glm.vec3) -> None:
         """
         Render the model using instanced rendering.
 
@@ -118,15 +163,17 @@ class Model:
             m_cam: Camera/view matrix
             sun_dir: Direction of sunlight for lighting calculations
         """
-        self.program['m_proj'].write(np.array(m_proj, dtype='f4').tobytes())
-        self.program['m_cam'].write(np.array(m_cam, dtype='f4').tobytes())
+        camera.bind(self.program)
+
         self.program['sun_dir'].value = tuple(sun_dir)
 
-        if self.instances_dirty:
-            self.instance_buffer.write(self.instance_matrices[:self.instance_count].tobytes())
+        if True or self.instances_dirty:
+            self.instance_buffer.write(self.instance_matrices[:self.instance_count])
             self.instances_dirty = False
 
         for part in self.parts:
+            if texture := part.get('texture'):
+                texture.use(location=0)
             part['vao'].render(instances=self.instance_count)
 
     def destroy(self) -> None:
@@ -160,14 +207,17 @@ class Instance:
     @property
     def matrix(self) -> glm.mat4:
         """Compute transformation matrix for this instance."""
-        return glm.translate(glm.mat4(1), self.pos) * glm.mat4_cast(self.rot) * glm.scale(glm.mat4(1), self.scale)
+        return glm.scale(
+            glm.translate(self.pos) * glm.mat4(self.rot),
+            glm.vec3(self.scale)
+        )
 
     def update(self) -> None:
         """
         Recalculate and upload the transformation matrix to the model's buffer.
         """
-
         self.model.update_instance(self.index, self.matrix)
+
 
 class Scene:
     """
@@ -175,8 +225,8 @@ class Scene:
 
     Supports loading models from the assets package and drawing by model name.
     """
-    def __init__(self, ctx: moderngl.Context) -> None:
-        self.ctx = ctx
+    def __init__(self) -> None:
+        self.ctx = mglw.ctx()
         self.models: Dict[str, Model] = {}
         self.instances: List[Instance] = []
 
@@ -192,7 +242,8 @@ class Scene:
         Returns:
             The loaded Model
         """
-        with importlib.resources.path('assets', filename) as model_path:
+        files = importlib.resources.files()
+        with importlib.resources.as_file(files / f'models/{filename}') as model_path:
             mesh = pywavefront.Wavefront(str(model_path), create_materials=True, collect_faces=True)
         model = Model(mesh, self.ctx, program, capacity)
         self.models[filename] = model
@@ -212,7 +263,7 @@ class Scene:
         self.instances.append(inst)
         return inst
 
-    def draw(self, model_filename: str, m_proj: glm.mat4, m_cam: glm.mat4, sun_dir: glm.vec3) -> None:
+    def draw(self, camera: Camera, sun_dir: glm.vec3) -> None:
         """
         Draw all instances of a given model.
 
@@ -222,8 +273,8 @@ class Scene:
             m_cam: Camera/view matrix
             sun_dir: Directional light vector
         """
-        if model_filename in self.models:
-            self.models[model_filename].draw(m_proj, m_cam, sun_dir)
+        for model in self.models.values():
+            model.draw(camera, sun_dir)
 
     def destroy(self) -> None:
         """
@@ -233,3 +284,51 @@ class Scene:
             model.destroy()
         self.models.clear()
         self.instances.clear()
+
+
+
+class SceneDemo(mglw.WindowConfig):
+    gl_version = (3, 3)
+    title = "Instanced rendering demo"
+    window_size = (1920, 1080)
+    aspect_ratio = None  # Let the window determine the aspect ratio.
+    resizable = False
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Create a shader program for the model.
+        prog: moderngl.Program = load_shader('texture_alpha')
+
+        self.scene = Scene()
+        plant: Model = self.scene.load('fern.obj', prog, capacity=100)
+
+        self.camera = Camera(
+            eye=[0.0, 20.0, 50.0],
+            target=[0.0, 0.0, 0.0],
+            up=[0.0, 1.0, 0.0],
+            fov=70.0,
+            aspect=self.wnd.aspect_ratio,
+            near=0.1,
+            far=1000.0,
+        )
+        self.camera.set_aspect(self.wnd.aspect_ratio)
+        self.camera.look_at(glm.vec3(0, 0, 0))
+
+        for _ in range(20):
+            inst: Instance = self.scene.add(plant)
+            inst.pos = glm.vec3(random.uniform(-20, 20), 1, random.uniform(-20, 20))
+            inst.rot = glm.angleAxis(random.uniform(0, 2 * math.pi), glm.vec3(0, 1, 0))
+            inst.scale = glm.vec3(1, 1, 1)
+            inst.update()
+
+    def on_render(self, time, frame_time):
+        self.ctx.clear(0.0, 0.0, 0.0, 1.0)
+        # Draw the plant model with all its instances.
+        self.scene.draw(self.camera, glm.vec3(0.5, 1.0, 0.3))
+
+    def on_close(self):
+        self.scene.destroy()
+
+
+def main():
+    mglw.run_window_config(SceneDemo)

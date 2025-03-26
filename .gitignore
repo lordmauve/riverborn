@@ -1,3 +1,5 @@
 *.pyc
 .venv
 _version.py
+screenshot_*.png
+video_*.mp4

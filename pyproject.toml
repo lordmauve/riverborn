@@ -10,7 +10,6 @@ dependencies = [
     "moderngl-window[glfw,pywavefront]>=3.1.1",
     "noise>=1.2.2",
     "numpy>=2.2.4",
-    "pyrr>=0.10.3",
     "wasabi-geom>=2.3.0",
 ]
 
@@ -19,6 +18,7 @@ riverborn = "riverborn:main"
 rb-heightfield = "riverborn.heightfield:main"
 rb-water = "riverborn.mgl_terrain:main"
 rb-ripples = "riverborn.ripples:main"
+rb-scene = "riverborn.scene:main"
 
 [build-system]
 requires = ["flit_scm>=1.7.0"]

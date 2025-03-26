@@ -7,7 +7,6 @@ import moderngl_window as mglw
 from moderngl_window import scene
 import numpy as np
 import noise
-from pyrr import Matrix44, Vector3
 import imageio as iio
 from wasabigeom import vec2
 import glm
@@ -89,9 +88,9 @@ class TextureAlphaProgram(scene.MeshProgram):
     def draw(
         self,
         mesh: scene.Mesh,
-        projection_matrix: Matrix44,
-        model_matrix: Matrix44,
-        camera_matrix: Matrix44,
+        projection_matrix: glm.mat4,
+        model_matrix: glm.mat4,
+        camera_matrix: glm.mat4,
         time: float = 0.0,
     ) -> None:
         assert self.program is not None, "There is no program to draw"
@@ -108,7 +107,7 @@ class TextureAlphaProgram(scene.MeshProgram):
         self.program["texture0"].value = 0
         self.program["m_proj"].write(projection_matrix)
         self.program["m_model"].write(model_matrix)
-        self.program["m_cam"].write(camera_matrix)
+        self.program["m_view"].write(camera_matrix)
         mesh.vao.render(self.program)
 
     def apply(self, mesh: scene.Mesh) -> scene.MeshProgram | None:
@@ -149,15 +148,17 @@ class WaterApp(mglw.WindowConfig):
             create_noise_texture(1024, color=(0.6, 0.5, 0.4))
         )
 
-        self.plant = self.load_scene('multi-stylized-grass/14.obj')
+        with importlib.resources.as_file(importlib.resources.files('riverborn') / 'models') as resource_dir:
+            self.resource_dir = resource_dir
+            self.plant = self.load_scene(resource_dir / 'fern.obj')
+            self.canoe = self.load_scene(resource_dir / 'canoe.glb')
+
         self.plant.prepare()
         self.plant.apply_mesh_programs([TextureAlphaProgram()])
-
-        self.canoe = self.load_scene('kenney-nature-kit/canoe.glb')
         self.canoe.prepare()
 
-        self.plant.matrix *= Matrix44.from_scale([0.1 , 0.1, 0.1], dtype='f4')
-        self.canoe.matrix *= Matrix44.from_scale([10, 10, 10], dtype='f4')
+        self.plant.matrix *= glm.scale(glm.vec3(0.1 , 0.1, 0.1))
+        self.canoe.matrix *= glm.scale(glm.vec3(10, 10, 10))
 
         # Create the camera.
         self.camera = Camera(
@@ -209,13 +210,8 @@ class WaterApp(mglw.WindowConfig):
 
         # Define model matrices.
         # Water plane: a translation upward to water_level.
-        self.water_model = Matrix44.from_translation([0.0, 1.0, 0.0], dtype='f4')
+        self.water_model = glm.translate(glm.vec3([0.0, 1.0, 0.0]))
         # Water-bottom: assume at y = 0.
-
-
-        # Set up a basic camera.
-        self.camera_pos = Vector3([0.0, 50.0, 100.0])
-        self.look_at = Vector3([0.0, 0.0, 0.0])
 
     canoe_pos = vec2(0, 0)
     canoe_rot = 0
@@ -283,7 +279,7 @@ class WaterApp(mglw.WindowConfig):
         self.water_prog["near"].value = 0.1
         self.water_prog["far"].value = 1000.0
         self.water_prog["resolution"].value = self.wnd.size
-        self.water_prog["model"].write(self.water_model)
+        self.water_prog["m_model"].write(self.water_model)
         self.env_cube.use(location=1)
         self.water_prog["env_cube"].value = 1
         self.offscreen_depth.use(location=2)
@@ -294,7 +290,8 @@ class WaterApp(mglw.WindowConfig):
         self.water_prog['base_water'] = (0.3, 0.25, 0.2)
         self.water_prog['water_opaque_depth'] = 3
 
-        self.camera.bind(self.water_prog, self.water_model, mvp_uniform="mvp", pos="camera_pos")
+
+        self.camera.bind(self.water_prog, pos_uniform="camera_pos")
         x, y, w, h = self.wnd.viewport
         self.water_prog["resolution"].value = self.wnd.size
         with self.ctx.scope(enable_only=moderngl.BLEND | moderngl.DEPTH_TEST):
@@ -329,10 +326,13 @@ class WaterApp(mglw.WindowConfig):
         cur_pos = (cur_pos[0] * 0.5 + 0.5, cur_pos[1] * 0.5 + 0.5)
         return cur_pos
 
+    def screen_to_water(self, x: float, y: float) -> tuple[float, float] | None:
+        intersection = self.screen_to_ground(x, y)
+        return intersection and self.pos_to_water(intersection)
+
     def on_mouse_drag_event(self, x, y, dx, dy):
         # Convert mouse coordinates (window: origin top-left) to texture coordinates (origin bottom-left)
-        intersection = self.screen_to_ground(x, y)
-        cur_pos = self.pos_to_water(intersection) if intersection else None
+        cur_pos = self.screen_to_water(x, y)
 
         if cur_pos is None:
             self.last_mouse = None
@@ -347,7 +347,7 @@ class WaterApp(mglw.WindowConfig):
 
     def on_mouse_press_event(self, x, y, button):
         # Record the initial mouse position in texture coordinates.
-        self.last_mouse = self.screen_to_ground(x, y)
+        self.last_mouse = self.screen_to_water(x, y)
 
     def on_mouse_release_event(self, x, y, button):
         self.last_mouse = None

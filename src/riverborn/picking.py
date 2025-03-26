@@ -1,17 +1,14 @@
-import numpy as np
-from typing import Optional, Tuple
-from numpy.typing import NDArray
 from dataclasses import dataclass
 
-from pyrr import Vector4, Vector3
+import glm
 
 from .camera import Camera
 
 
 @dataclass
 class Ray:
-    origin: Vector3
-    direction: Vector3
+    origin: glm.vec3
+    direction: glm.vec3
 
 
 def get_mouse_ray(
@@ -32,29 +29,24 @@ def get_mouse_ray(
     ndc_y: float = 1 - (mouse_y / screen_height) * 2  # Invert y if needed
 
     # Points in clip space
-    near_point_clip: Vector4 = Vector4([ndc_x, ndc_y, -1, 1], dtype=np.float32)
-    far_point_clip: Vector4 = Vector4([ndc_x, ndc_y, 1, 1], dtype=np.float32)
+    near_point_clip = glm.vec4([ndc_x, ndc_y, -1, 1])
+    far_point_clip = glm.vec4([ndc_x, ndc_y, 1, 1])
 
     # Get inverse matrices
-    inv_proj: Matrix44 = camera.get_proj_matrix().inverse
-    inv_view: Matrix44 = camera.get_view_matrix().inverse
+    inv_proj: glm.mat4 = glm.inverse(camera.get_proj_matrix())
+    inv_view: glm.mat4 = glm.inverse(camera.get_view_matrix())
 
     # Unproject to view space
-    near_view: Vector4 = inv_proj * near_point_clip
-    far_view: Vector4 = inv_proj * far_point_clip
-    near_view /= near_view[3]
-    far_view /= far_view[3]
+    near_view = inv_proj * near_point_clip
+    far_view = inv_proj * far_point_clip
 
     # Transform to world space
-    near_world: Vector4 = inv_view * near_view
-    far_world: Vector4 = inv_view * far_view
-    near_world /= near_world[3]
-    far_world /= far_world[3]
+    near_world = inv_view * near_view
+    far_world = inv_view * far_view
 
     # Create ray
-    ray_origin: Vector4 = near_world.vector3[0]
-    ray_direction: Vector4 = far_world.vector3[0] - ray_origin
-    ray_direction.normalize()
+    ray_origin = near_world.xyz / near_world.w
+    ray_direction = glm.normalize(far_world.xyz / far_world.w - ray_origin)
 
     return Ray(origin=ray_origin, direction=ray_direction)
 
@@ -62,7 +54,7 @@ def get_mouse_ray(
 def intersect_ray_plane(
     ray: Ray,
     plane_y: float
-) -> NDArray[np.float32] | None:
+) -> glm.vec3 | None:
     """
     Intersect the ray with the plane y = plane_y.
 
@@ -77,5 +69,4 @@ def intersect_ray_plane(
     if t < 0:
         return None  # Intersection behind the ray origin
 
-    intersection: NDArray[np.float32] = ray.origin + t * ray.direction
-    return intersection
+    return ray.origin + t * ray.direction

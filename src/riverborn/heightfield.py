@@ -2,7 +2,7 @@ import moderngl
 import moderngl_window as mglw
 import numpy as np
 import noise
-from pyrr import Matrix44, Quaternion, Vector3
+import glm
 
 from . import terrain
 from .shader import load_shader
@@ -49,10 +49,9 @@ class HeightfieldApp(mglw.WindowConfig):
         super().__init__(**kwargs)
 
         self.instance = Instance(
-            self.ctx,
             terrain.make_terrain(100, 100, 100, 10, 0.1),
-            load_shader(self.ctx, 'diffuse'),
-            create_noise_texture(self.ctx, color=(0.6, 0.5, 0.4))
+            load_shader('diffuse'),
+            create_noise_texture(color=(0.6, 0.5, 0.4))
         )
 
         # Create the camera.
@@ -73,8 +72,8 @@ class HeightfieldApp(mglw.WindowConfig):
         self.ctx.enable(moderngl.DEPTH_TEST)
 
         self.time += frame_time
-        self.instance.rotation = Quaternion.from_eulers(
-            [0.0, self.time, 0.0], dtype=np.float32
+        self.instance.rotation = glm.quat(
+            glm.vec3(0.0, self.time, 0.0)
         )
 
         # Update camera aspect if needed.
@@ -92,8 +91,8 @@ class Instance:
         shader: moderngl.Program,
         texture: moderngl.Texture
     ) -> None:
-        self.pos = Vector3([0.0, 0.0, 0.0])
-        self.rotation = Quaternion()
+        self.pos = glm.vec3(0.0, 0.0, 0.0)
+        self.rotation = glm.quat()
         self.ctx = mglw.ctx()
         self.mesh = mesh
         self.prog = shader
@@ -121,10 +120,10 @@ class Instance:
         self.prog["light_color"].value = (1.0, 1.0, 1.0)
         self.prog["ambient_color"].value = (0.3, 0.3, 0.3)
 
-        model = Matrix44.from_translation(self.pos) * self.rotation
+        self.prog['m_model'].write(glm.translate(glm.mat4(self.rotation), self.pos))
 
         # Bind the camera matrices (MVP and normal matrix) to the shader.
-        camera.bind(self.prog, model, normal_matrix="normal_matrix")
+        camera.bind(self.prog)
 
         self.vao.render()
 
