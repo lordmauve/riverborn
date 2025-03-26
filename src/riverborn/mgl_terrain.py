@@ -227,12 +227,12 @@ class WaterApp(mglw.WindowConfig):
     def paddle(self, side: float) -> None:
         """Paddle in the water."""
         self.canoe_angular_vel += side * 0.5
-        self.canoe_vel += vec2(0, 2).rotated(-self.canoe_rot)
+        self.canoe_vel += vec2(0, 0.5).rotated(-self.canoe_rot)
 
     def update(self, dt: float) -> None:
-        self.canoe_vel *= 0.5 ** dt
+        self.canoe_vel *= 0.6 ** dt
         self.canoe_pos += self.canoe_vel * dt
-        self.canoe_angular_vel *= 0.1 ** dt
+        self.canoe_angular_vel *= 0.3 ** dt
         self.canoe_rot += self.canoe_angular_vel * dt
 
         prev_pos = self.canoe_pos3
