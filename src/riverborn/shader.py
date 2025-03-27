@@ -393,7 +393,7 @@ def enrich_program(program: moderngl.Program) -> None:
             else:
                 if isinstance(val, (moderngl.Texture, moderngl.TextureCube, moderngl.TextureArray, moderngl.Texture3D)):
                     val.use(location=next_tex)
-                    val = next_tex
+                    obj.value = next_tex
                     next_tex += 1
                 elif hasattr(type(val), '__buffer__'):
                     obj.write(val)
