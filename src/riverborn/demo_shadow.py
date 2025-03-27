@@ -1,5 +1,5 @@
 """
-Shadow Mapping Demo - Shows integration with Scene framework
+Shadow Mapping Demo - Shows integration with Scene framework with debug visualization
 """
 import os
 import sys
@@ -16,6 +16,7 @@ from riverborn.shadow import ShadowSystem, Light
 from riverborn.shader import load_shader
 from riverborn.heightfield import create_noise_texture, Instance as TerrainInstance
 from riverborn.terrain import make_terrain
+from riverborn.shadow_debug import render_shadow_map_to_screen
 
 
 class ShadowMappingDemo(mglw.WindowConfig):
@@ -56,7 +57,7 @@ class ShadowMappingDemo(mglw.WindowConfig):
         )
 
         # Create the shadow system
-        self.shadow_system = ShadowSystem(shadow_map_size=2048)
+        self.shadow_system = ShadowSystem(shadow_map_size=1024)
         self.shadow_system.set_light(self.light)
 
         # Create terrain
@@ -84,6 +85,10 @@ class ShadowMappingDemo(mglw.WindowConfig):
         # Time tracking
         self.time = 0
         self.rotate_light = True
+
+        # Debug mode - set to True to see the shadow map
+        self.debug_mode = True
+        self.debug_scale = 0.3  # Size of debug view as proportion of screen
 
     def on_resize(self, width, height):
         self.camera.set_aspect(width / height)
@@ -118,8 +123,28 @@ class ShadowMappingDemo(mglw.WindowConfig):
 
         # Render scene objects
         self.scene.draw(self.camera, sun_dir=self.light.direction)
-        # for model_name, model in self.scene.models.items():
-        #     self.shadow_system.render_model_with_shadows(model)
+
+        # Debug view of shadow map in corner if enabled
+        if self.debug_mode:
+            # Set viewport to a smaller size in the corner
+            screen_width, screen_height = self.wnd.buffer_size
+            debug_size = int(min(screen_width, screen_height) * self.debug_scale)
+
+            # Save current viewport
+            old_viewport = self.ctx.viewport
+
+            # Set viewport to corner
+            self.ctx.viewport = (0, 0, debug_size, debug_size)
+
+            # Render shadow map to this viewport
+            render_shadow_map_to_screen(
+                self.shadow_system.shadow_map.depth_texture,  # Fix: Access depth_texture through shadow_map
+                near_plane=self.light.near,
+                far_plane=self.light.far
+            )
+
+            # Restore original viewport
+            self.ctx.viewport = old_viewport
 
     def on_key_event(self, key, action, modifiers):
         if action == self.wnd.keys.ACTION_PRESS:
@@ -128,6 +153,9 @@ class ShadowMappingDemo(mglw.WindowConfig):
             elif key == self.wnd.keys.SPACE:
                 self.rotate_light = not self.rotate_light
                 print(f"Light rotation: {'on' if self.rotate_light else 'off'}")
+            elif key == self.wnd.keys.D:
+                self.debug_mode = not self.debug_mode
+                print(f"Debug mode: {'on' if self.debug_mode else 'off'}")
             elif key == self.wnd.keys.F12:
                 from riverborn.screenshot import screenshot
                 screenshot()

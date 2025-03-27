@@ -26,7 +26,7 @@ void main() {
     }
 
     vec3 normal = normalize(frag_normal);
-    vec3 light = normalize(-light_dir);
+    vec3 light = normalize(light_dir);
 
     // Ambient
     vec3 ambient = ambient_color;
@@ -50,9 +50,9 @@ void main() {
     }
 
     // Combine lighting with shadow
-    vec3 lighting = ambient + (1.0 - shadow) * (diffuse + specular);
+    vec3 lighting = ambient + (1.0 - shadow) * diffuse;
 
 
     // Final color
-    fragColor = vec4(lighting * tex_color.rgb, 1.0);
+    fragColor = vec4(lighting * tex_color.rgb + specular, 1.0);
 }

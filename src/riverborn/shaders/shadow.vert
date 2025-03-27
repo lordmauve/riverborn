@@ -20,19 +20,18 @@ out vec4 frag_pos_light_space;
 
 void main() {
     // Transform to world space
-    mat4 model = transpose(m_model);
-
-    vec4 world_pos = model * vec4(in_position, 1.0);
+    vec4 world_pos = m_model * vec4(in_position, 1.0);
     frag_pos = world_pos.xyz;
 
     // Calculate normal in world space
-    mat3 normal_matrix = transpose(inverse(mat3(model)));
+    mat3 normal_matrix = inverse(mat3(m_model));
     frag_normal = normalize(normal_matrix * in_normal);
 
     // Pass texture coordinates
     frag_uv = in_texcoord_0;
 
     // Calculate position in light space for shadow mapping
+    // Apply the light space matrix directly to the world position
     frag_pos_light_space = light_space_matrix * world_pos;
 
     // Calculate clip space position

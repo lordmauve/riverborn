@@ -28,7 +28,8 @@ class Light:
                  distance: float = 100.0,
                  ortho_size: float = 50.0,
                  near: float = 1.0,
-                 far: float = 200.0):
+                 far: float = 200.0,
+                 target: glm.vec3 = glm.vec3(0.0)):
         """Initialize the light.
 
         Args:
@@ -39,6 +40,7 @@ class Light:
             ortho_size: Size of the orthographic projection box
             near: Near plane distance
             far: Far plane distance
+            target: Target point the light looks at (center of the shadow projection)
         """
         self.direction = glm.normalize(glm.vec3(direction))
         self.color = glm.vec3(color)
@@ -47,18 +49,20 @@ class Light:
         self.ortho_size = ortho_size
         self.near = near
         self.far = far
+        self.target = glm.vec3(target)
 
-        # Position the light opposite to its direction
-        self.position = -self.direction * distance
         self.update_matrices()
 
     def update_matrices(self):
         """Update view and projection matrices."""
-        # Create view matrix looking from light position toward the origin
+        # Position the light by moving in the opposite direction from the target
+        self.position = self.target - self.direction * self.distance
+
+        # Create view matrix looking from light position toward the target
         self.view_matrix = glm.lookAt(
-            self.position,                # eye position
-            glm.vec3(0.0, 0.0, 0.0),      # looking at origin
-            glm.vec3(0.0, 1.0, 0.0)       # up vector
+            self.position,             # eye position
+            self.target,               # looking at target
+            glm.vec3(0.0, 1.0, 0.0)    # up vector
         )
 
         # Create orthographic projection matrix
@@ -94,14 +98,15 @@ class ShadowMap:
 
         # Create a depth texture
         self.depth_texture = self.ctx.depth_texture((width, height))
-        self.depth_texture.compare_func = '<='
+        #self.depth_texture.compare_func = '<='
         self.depth_texture.filter = (moderngl.NEAREST, moderngl.NEAREST)
 
         # Create a framebuffer with the depth texture
         self.fbo = self.ctx.framebuffer(depth_attachment=self.depth_texture)
 
         # Load depth shader program
-        self.depth_shader = load_shader('depth', defines={'INSTANCED': '1'})
+        self.depth_shader_instanced = load_shader('depth', defines={'INSTANCED': '1'})
+        self.depth_shader_uniform = load_shader('depth')
 
 
 class ShadowSystem:
@@ -120,7 +125,8 @@ class ShadowSystem:
         """
         self.shadow_map = ShadowMap(shadow_map_size, shadow_map_size)
         self.light = None
-        self.shadow_shader = load_shader('shadow', defines={'INSTANCED': '1'})
+        self.shadow_shader_instanced = load_shader('shadow', defines={'INSTANCED': '1'})
+        self.shadow_shader_uniform = load_shader('shadow')
         self.use_pcf = use_pcf
 
     def set_light(self, light: Light):
@@ -148,9 +154,11 @@ class ShadowSystem:
         previous_viewport = ctx.viewport
         ctx.viewport = (0, 0, self.shadow_map.width, self.shadow_map.height)
 
-        # Update light space matrix uniform for the depth shader
-        depth_shader = self.shadow_map.depth_shader
-        depth_shader['light_space_matrix'].write(self.light.light_space_matrix)
+        # Update light space matrix uniform for the depth shader using bind() helper
+        depth_shader = self.shadow_map.depth_shader_instanced
+        depth_shader.bind(
+            light_space_matrix=self.light.light_space_matrix
+        )
 
         # Render each model in the scene
         for model_name, model in scene.models.items():
@@ -188,7 +196,7 @@ class ShadowSystem:
             shadow_map=self.shadow_map.depth_texture,
             use_pcf=self.use_pcf,
             pcf_radius=1.0,
-            shadow_bias=0.005,
+            shadow_bias=0.01,
             **uniforms
         )
 
