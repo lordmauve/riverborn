@@ -19,8 +19,8 @@ void main() {
     vec3 R = reflect(-L, N);
 
     float diff = clamp(dot(N, L), 0.0, 1.0);
-    float spec = pow(max(dot(V, R), 0.0), 32.0);
+    float spec = pow(max(dot(V, R), 0.0), 10.0);
 
-    vec3 color = diff * diffuse.rgb + spec * vec3(1.0);
+    vec3 color = diff * diffuse.rgb + spec * vec3(0.7);
     f_color = vec4(color, 1.0);
 }
