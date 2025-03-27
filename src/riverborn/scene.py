@@ -14,6 +14,7 @@ The system supports:
 - Directional (sunlight) lighting with diffuse and specular shading
 """
 
+from contextlib import suppress
 import importlib.resources
 from pathlib import Path
 import imageio
@@ -182,7 +183,8 @@ class Model:
         """
         camera.bind(self.program)
 
-        self.program['sun_dir'].value = tuple(sun_dir)
+        with suppress(KeyError):
+            self.program['sun_dir'].value = tuple(sun_dir)
 
         if True or self.instances_dirty:
             self.instance_buffer.write(self.instance_matrices[:self.instance_count])

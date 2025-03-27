@@ -100,18 +100,19 @@ class Instance:
         self.vbo = self.ctx.buffer(mesh.vertices)
         self.ibo = self.ctx.buffer(mesh.indices.astype("i4").tobytes())
 
-        # Build the shader program.
-        self.prog = load_shader('diffuse')
-
         # Create the vertex array object linking attributes.
         self.vao = self.ctx.vertex_array(
             self.prog,
-            [(self.vbo, "3f 3f 2f", "in_position", "in_normal", "in_uv")],
+            [(self.vbo, "3f 3f 2f", "in_position", "in_normal", "in_texcoord_0")],
             self.ibo,
         )
 
         # Create the texture (generated via Perlin noise).
         self.texture = texture
+
+    @property
+    def matrix(self) -> glm.mat4:
+        return glm.translate(glm.mat4(self.rotation), self.pos)
 
     def render(self, camera: Camera):
         self.texture.use(location=0)
@@ -120,7 +121,7 @@ class Instance:
         self.prog["light_color"].value = (1.0, 1.0, 1.0)
         self.prog["ambient_color"].value = (0.3, 0.3, 0.3)
 
-        self.prog['m_model'].write(glm.translate(glm.mat4(self.rotation), self.pos))
+        self.prog['m_model'].write(self.matrix)
 
         # Bind the camera matrices (MVP and normal matrix) to the shader.
         camera.bind(self.prog)

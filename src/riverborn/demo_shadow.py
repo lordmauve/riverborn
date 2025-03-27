@@ -1,0 +1,155 @@
+"""
+Shadow Mapping Demo - Shows integration with Scene framework
+"""
+import os
+import sys
+import random
+import math
+import moderngl
+import moderngl_window as mglw
+import numpy as np
+from pyglm import glm
+
+from riverborn.camera import Camera
+from riverborn.scene import Scene, Model, Instance
+from riverborn.shadow import ShadowSystem, Light
+from riverborn.shader import load_shader
+from riverborn.heightfield import create_noise_texture, Instance as TerrainInstance
+from riverborn.terrain import make_terrain
+
+
+class ShadowMappingDemo(mglw.WindowConfig):
+    """Demo that shows shadow mapping with the Scene framework."""
+    gl_version = (3, 3)
+    title = "Shadow Mapping Demo"
+    window_size = (1280, 720)
+    aspect_ratio = None
+    resizable = True
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.ctx.enable(moderngl.DEPTH_TEST)
+
+        # Create a shadow-capable shader
+        self.shadow_program = load_shader('shadow', defines={'INSTANCED': '1'})
+
+        # Create the scene
+        self.scene = Scene()
+
+        # Create the camera.
+        self.camera = Camera(
+            eye=[0.0, 20.0, 50.0],
+            target=[0.0, 0.0, 0.0],
+            up=[0.0, 1.0, 0.0],
+            fov=70.0,
+            aspect=self.wnd.aspect_ratio,
+            near=0.1,
+            far=1000.0,
+        )
+
+        # Create a directional light
+        self.light = Light(
+            direction=[0.5, -0.8, -0.3],
+            color=[1.0, 1.0, 1.0],
+            ambient=[0.2, 0.2, 0.2],
+            ortho_size=50.0
+        )
+
+        # Create the shadow system
+        self.shadow_system = ShadowSystem(shadow_map_size=2048)
+        self.shadow_system.set_light(self.light)
+
+        # Create terrain
+        terrain_mesh = make_terrain(100, 50, 50, 8, 0.05)
+        self.terrain = TerrainInstance(
+            terrain_mesh,
+            load_shader('shadow'),
+            create_noise_texture(1024, color=(0.6, 0.5, 0.4))
+        )
+
+        # Load a fern model (you can change this to any available model)
+        try:
+            self.plant_model = self.scene.load('fern.obj', self.shadow_program, capacity=50)
+            # Create plant instances
+            for _ in range(20):
+                inst = self.scene.add(self.plant_model)
+                # Random position on the terrain
+                inst.pos = (random.uniform(-20, 20), 0, random.uniform(-20, 20))
+                inst.rotate(random.uniform(0, 2 * math.pi), glm.vec3(0, 1, 0))
+                inst.scale = glm.vec3(random.uniform(0.05, 0.1))
+                inst.update()
+        except Exception as e:
+            print(f"Could not load plant model: {e}")
+
+        # Time tracking
+        self.time = 0
+        self.rotate_light = True
+
+    def on_resize(self, width, height):
+        self.camera.set_aspect(width / height)
+
+    def on_render(self, time, frame_time):
+        self.time += frame_time
+        self.ctx.clear(0.2, 0.3, 0.4)
+
+        # Update light direction if rotating
+        if self.rotate_light:
+            angle = self.time * 0.5
+            self.light.direction = glm.normalize(glm.vec3(
+                math.sin(angle),
+                -0.8,
+                math.cos(angle)
+            ))
+            self.light.update_matrices()
+
+        # First pass: render scene to shadow map from light's perspective
+        self.shadow_system.render_depth(self.scene)
+
+        # Second pass: render scene with shadows
+        ctx = mglw.ctx()
+        ctx.screen.use()
+
+        # Render terrain
+        self.shadow_system.setup_shadow_shader(self.camera, self.terrain.prog, texture0=self.terrain.texture, m_model=self.terrain.matrix)
+        self.terrain.vao.render()
+
+        # Set up shadow shader with common uniforms
+        self.shadow_system.setup_shadow_shader(self.camera, self.shadow_system.shadow_shader, texture0=self.scene.models['fern.obj'].textures['diffuse.tga'])
+
+        # Render scene objects
+        self.scene.draw(self.camera, sun_dir=self.light.direction)
+        # for model_name, model in self.scene.models.items():
+        #     self.shadow_system.render_model_with_shadows(model)
+
+    def on_key_event(self, key, action, modifiers):
+        if action == self.wnd.keys.ACTION_PRESS:
+            if key == self.wnd.keys.ESCAPE:
+                sys.exit()
+            elif key == self.wnd.keys.SPACE:
+                self.rotate_light = not self.rotate_light
+                print(f"Light rotation: {'on' if self.rotate_light else 'off'}")
+            elif key == self.wnd.keys.F12:
+                from riverborn.screenshot import screenshot
+                screenshot()
+
+    def on_mouse_drag_event(self, x, y, dx, dy):
+        # Simple camera orbit on mouse drag
+        if self.wnd.mouse_states.left:
+            sensitivity = 0.005
+            self.camera.eye = glm.vec3(
+                glm.rotate(
+                    glm.mat4(1.0),
+                    -dx * sensitivity,
+                    glm.vec3(0, 1, 0)
+                ) * glm.vec4(self.camera.eye, 1.0)
+            )
+            self.camera.look_at(glm.vec3(0, 0, 0))
+
+
+def main():
+    """Run the shadow mapping demo."""
+    mglw.run_window_config(ShadowMappingDemo)
+
+
+if __name__ == '__main__':
+    main()
