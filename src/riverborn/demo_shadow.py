@@ -115,36 +115,14 @@ class ShadowMappingDemo(mglw.WindowConfig):
         ctx.screen.use()
 
         # Render terrain
-        self.shadow_system.setup_shadow_shader(self.camera, self.terrain.prog, texture0=self.terrain.texture, m_model=self.terrain.matrix)
-        self.terrain.vao.render()
+        #self.shadow_system.setup_shadow_shader(self.camera, self.terrain.prog, texture0=self.terrain.texture, m_model=self.terrain.matrix)
+        #self.terrain.vao.render()
 
         # Set up shadow shader with common uniforms
-        self.shadow_system.setup_shadow_shader(self.camera, self.shadow_system.shadow_shader, texture0=self.scene.models['fern.obj'].textures['diffuse.tga'])
+        self.shadow_system.setup_shadow_shader(self.camera, self.shadow_system.shadow_shader_instanced, texture0=self.scene.models['fern.obj'].textures['diffuse.tga'])
 
         # Render scene objects
         self.scene.draw(self.camera, sun_dir=self.light.direction)
-
-        # Debug view of shadow map in corner if enabled
-        if self.debug_mode:
-            # Set viewport to a smaller size in the corner
-            screen_width, screen_height = self.wnd.buffer_size
-            debug_size = int(min(screen_width, screen_height) * self.debug_scale)
-
-            # Save current viewport
-            old_viewport = self.ctx.viewport
-
-            # Set viewport to corner
-            self.ctx.viewport = (0, 0, debug_size, debug_size)
-
-            # Render shadow map to this viewport
-            render_shadow_map_to_screen(
-                self.shadow_system.shadow_map.depth_texture,  # Fix: Access depth_texture through shadow_map
-                near_plane=self.light.near,
-                far_plane=self.light.far
-            )
-
-            # Restore original viewport
-            self.ctx.viewport = old_viewport
 
     def on_key_event(self, key, action, modifiers):
         if action == self.wnd.keys.ACTION_PRESS:
