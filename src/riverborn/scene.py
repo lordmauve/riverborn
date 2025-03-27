@@ -341,5 +341,18 @@ class SceneDemo(mglw.WindowConfig):
         self.scene.destroy()
 
 
+    def on_key_event(self, key, action, modifiers):
+
+        op = 'press' if action == self.wnd.keys.ACTION_PRESS else 'release'
+        keys = self.wnd.keys
+        match op, key, modifiers.shift:
+            case ('press', keys.ESCAPE, _):
+                sys.exit()
+
+            case ('press', keys.F12, False):
+                from .screenshot import screenshot
+                screenshot()
+
+
 def main():
     mglw.run_window_config(SceneDemo)
