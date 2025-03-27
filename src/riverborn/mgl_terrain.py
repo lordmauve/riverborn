@@ -80,6 +80,9 @@ with importlib.resources.as_file(importlib.resources.files() / 'resources') as r
     pass
 
 
+SUN_DIR = glm.normalize(glm.vec3(1, 1, 1))
+
+
 class TextureAlphaProgram(scene.MeshProgram):
 
     def __init__(self) -> None:
@@ -108,6 +111,7 @@ class TextureAlphaProgram(scene.MeshProgram):
         self.program["m_proj"].write(projection_matrix)
         self.program["m_model"].write(model_matrix)
         self.program["m_view"].write(camera_matrix)
+        self.program["sun_dir"] = SUN_DIR
         mesh.vao.render(self.program)
 
     def apply(self, mesh: scene.Mesh) -> scene.MeshProgram | None:

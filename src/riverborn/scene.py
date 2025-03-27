@@ -30,6 +30,10 @@ from riverborn.camera import Camera
 from riverborn.shader import load_shader
 
 
+SUN_DIR = glm.normalize(glm.vec3(1, 1, 1))
+
+
+
 class Model:
     """
     A 3D model loaded from an OBJ file with support for instanced rendering.
@@ -70,6 +74,8 @@ class Model:
         vertex_stride = 8
         for mesh_name, mesh_obj in mesh.meshes.items():
             for material in mesh_obj.materials:
+                assert material.vertex_format == 'T2F_N3F_V3F', \
+                    f"Unsupported vertex format: {material.vertex_format}"
                 vertices = np.array(material.vertices, dtype='f4')
                 vbo = ctx.buffer(vertices.tobytes())
                 if hasattr(material, 'texture'):
@@ -82,8 +88,8 @@ class Model:
                     indices = np.array([i for face in material.faces for i in face], dtype='i4')
                     ibo = ctx.buffer(indices.tobytes())
                     vao = ctx.vertex_array(program, [
-                        (vbo, '3f 3f 2f', 'in_position', 'in_normal', 'in_texcoord_0'),
-                        (self.instance_buffer, '16f4/i', 'instance_model')
+                        (vbo, '2f 3f 3f', 'in_texcoord_0', 'in_normal', 'in_position'),
+                        (self.instance_buffer, '16f4/i', 'm_model')
                     ], ibo)
                     self.parts.append({
                         "vbo": vbo, "ibo": ibo, "vao": vao, "indexed": True,
@@ -91,8 +97,8 @@ class Model:
                     })
                 else:
                     vao = ctx.vertex_array(program, [
-                        (vbo, '3f 3f 2f', 'in_position', 'in_normal', 'in_texcoord_0'),
-                        (self.instance_buffer, '16f4/i', 'instance_model')
+                        (vbo, '2f 3f 3f', 'in_texcoord_0', 'in_normal', 'in_position'),
+                        (self.instance_buffer, '16f4/i', 'm_model')
                     ])
                     self.parts.append({
                         "vbo": vbo,
@@ -110,14 +116,17 @@ class Model:
         # Read image using imageio
         with file.open('rb') as f:
             image = imageio.imread(f)
+            image = np.flipud(image)
         if image.shape[2] == 3:  # Convert RGB to RGBA
             rgba = np.zeros((image.shape[0], image.shape[1], 4), dtype=np.uint8)
             rgba[..., :3] = image
             rgba[..., 3] = 255
             image = rgba
 
+        h, w, depth = image.shape
+
         # Create ModernGL texture
-        texture = self.ctx.texture(image.shape[1::-1], 4, image.tobytes())
+        texture = self.ctx.texture((w, h), 4, image.tobytes())
         texture.filter = (moderngl.LINEAR, moderngl.LINEAR)
         texture.build_mipmaps()
         self.textures[path] = texture
@@ -135,7 +144,7 @@ class Model:
         """
         if self.instance_count >= self.instance_capacity:
             self.instance_capacity *= 2
-            self.instance_matrices.resize((self.instance_capacity, 16), refcheck=False)
+            self.instance_matrices.resize((self.instance_capacity, 4, 4), refcheck=False)
             self.instance_buffer.orphan(size=self.instance_capacity * 16 * 4)
         index = self.instance_count
         self.instance_matrices[index] = matrix
@@ -286,6 +295,8 @@ class Scene:
         self.instances.clear()
 
 
+SUN_DIR = glm.normalize(glm.vec3(1, 1, 1))
+
 
 class SceneDemo(mglw.WindowConfig):
     gl_version = (3, 3)
@@ -314,17 +325,17 @@ class SceneDemo(mglw.WindowConfig):
         self.camera.set_aspect(self.wnd.aspect_ratio)
         self.camera.look_at(glm.vec3(0, 0, 0))
 
-        for _ in range(20):
+        for _ in range(200):
             inst: Instance = self.scene.add(plant)
-            inst.pos = glm.vec3(random.uniform(-20, 20), 1, random.uniform(-20, 20))
+            inst.pos = glm.vec3(random.uniform(-100, 100), 1, random.uniform(-100, 100))
             inst.rot = glm.angleAxis(random.uniform(0, 2 * math.pi), glm.vec3(0, 1, 0))
-            inst.scale = glm.vec3(1, 1, 1)
+            inst.scale = glm.vec3(0.1)
             inst.update()
 
     def on_render(self, time, frame_time):
-        self.ctx.clear(0.0, 0.0, 0.0, 1.0)
+        self.ctx.clear(0.5, 0.55, 0.7, 1.0)
         # Draw the plant model with all its instances.
-        self.scene.draw(self.camera, glm.vec3(0.5, 1.0, 0.3))
+        self.scene.draw(self.camera, SUN_DIR)
 
     def on_close(self):
         self.scene.destroy()
