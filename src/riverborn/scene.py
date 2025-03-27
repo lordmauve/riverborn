@@ -21,7 +21,7 @@ import pywavefront
 import moderngl
 import moderngl_window as mglw
 import numpy as np
-import glm
+from pyglm import glm
 import random
 import math
 import weakref

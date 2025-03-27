@@ -30,3 +30,8 @@ exclude = [".gitignore"]
 [tool.setuptools_scm]
 write_to = "src/riverborn/_version.py"
 relative_to = "pyproject.toml"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+]

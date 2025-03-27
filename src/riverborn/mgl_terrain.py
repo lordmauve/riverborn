@@ -11,7 +11,7 @@ import numpy as np
 import noise
 import imageio as iio
 from wasabigeom import vec2
-import glm
+from pyglm import glm
 
 from riverborn import picking, terrain
 from riverborn.blending import blend_func

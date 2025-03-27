@@ -2,7 +2,7 @@ import moderngl
 import moderngl_window as mglw
 import numpy as np
 import noise
-import glm
+from pyglm import glm
 
 from . import terrain
 from .shader import load_shader

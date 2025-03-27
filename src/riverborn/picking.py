@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-import glm
+from pyglm import glm
 
 from .camera import Camera
 
