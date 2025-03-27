@@ -1,7 +1,9 @@
 from importlib.resources import files
 import re
 import os
+import struct
 from typing import Dict, List, Tuple, Set, Optional, Union, Any
+import warnings
 
 import moderngl
 import moderngl_window as mglw
@@ -340,6 +342,8 @@ def load_shader(name: str, *, vert: str | None = None, frag: str = None, defines
                 vertex_shader=vert_processed,
                 fragment_shader=frag_processed,
             )
+            program.label = name
+            enrich_program(program)
             return program
         except moderngl.Error as e:
             # Handle shader compilation errors with better diagnostics
@@ -366,3 +370,42 @@ def load_shader(name: str, *, vert: str | None = None, frag: str = None, defines
             if "shadow_common.glsl" in str(e):
                 print("  - shaders/shadow_common.glsl")
         raise
+
+
+def enrich_program(program: moderngl.Program) -> None:
+    uniformdefs = {}
+
+    for member in program:
+        obj = program.get(member, None)
+        if type(obj).__name__ == 'Uniform':
+            uniformdefs[member] = obj
+
+    def bind(**uniforms):
+        missing = None
+        next_tex = 0
+
+        for k, obj in uniformdefs.items():
+            val = uniforms.pop(k, None)
+            if val is None:
+                if missing is None:
+                    missing = []
+                missing.append(k)
+            else:
+                if isinstance(val, (moderngl.Texture, moderngl.TextureCube, moderngl.TextureArray, moderngl.Texture3D)):
+                    val.use(location=next_tex)
+                    val = next_tex
+                    next_tex += 1
+                elif hasattr(type(val), '__buffer__'):
+                    obj.write(val)
+                else:
+                    try:
+                        obj.value = val
+                    except struct.error as e:
+                        raise ValueError(f"Invalid value for {obj.fmt} uniform '{k}': {val!r}") from e
+        for k, v in uniforms.items():
+            warnings.warn(f"Unused uniform passed to {program.label}: '{k}': {v!r}", UserWarning, stacklevel=2)
+        if missing:
+            raise ValueError(f"Missing uniforms: {', '.join(missing)}")
+
+
+    program.bind = bind
