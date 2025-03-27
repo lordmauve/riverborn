@@ -150,40 +150,61 @@ class ShadowDebugDemo(mglw.WindowConfig):
             )
             self.terrain.vao.render()
 
-            # Render debug view in corner
-            screen_width, screen_height = self.wnd.buffer_size
-            debug_size = int(min(screen_width, screen_height) * 0.3)
-            old_viewport = ctx.viewport
-            ctx.viewport = (0, 0, debug_size, debug_size)
+            if self.debug_mode:
 
-            render_shadow_map_to_screen(
-                self.shadow_system.shadow_map.depth_texture,
-                near_plane=self.light.near,
-                far_plane=self.light.far
-            )
+                # Render debug view in corner
+                screen_width, screen_height = self.wnd.buffer_size
+                debug_size = int(min(screen_width, screen_height) * 0.3)
+                old_viewport = ctx.viewport
+                ctx.viewport = (0, 0, debug_size, debug_size)
 
-            ctx.viewport = old_viewport
+                render_shadow_map_to_screen(
+                    self.shadow_system.shadow_map.depth_texture,
+                    near_plane=self.light.near,
+                    far_plane=self.light.far
+                )
+
+                ctx.viewport = old_viewport
+
+    debug_mode = True
+    recorder = None
 
     def on_key_event(self, key, action, modifiers):
-        if action == self.wnd.keys.ACTION_PRESS:
-            if key == self.wnd.keys.ESCAPE:
-                exit()
-            elif key == self.wnd.keys.SPACE:
+        op = 'press' if action == self.wnd.keys.ACTION_PRESS else 'release'
+        keys = self.wnd.keys
+        match op, key, modifiers.shift:
+            case ('press', keys.ESCAPE, _):
+                sys.exit()
+
+            case ('press', keys.F12, False):
+                from riverborn.screenshot import screenshot
+                screenshot()
+
+            case ('press', keys.F12, True):
+                if self.recorder is None:
+                    from riverborn.screenshot import VideoRecorder
+                    self.recorder = VideoRecorder()
+                self.recorder.toggle_recording()
+
+            case ('press', keys.SPACE, _):
                 self.rotate_light = not self.rotate_light
                 print(f"Light rotation: {'on' if self.rotate_light else 'off'}")
-            elif key == self.wnd.keys.F:
+            case ('press', keys.F, _):
                 self.view_full_screen = not self.view_full_screen
                 print(f"Full screen mode: {'on' if self.view_full_screen else 'off'}")
-            elif key == self.wnd.keys.D:
+            case ('press', keys.D, _):
                 self.display_mode = (self.display_mode + 1) % len(self.display_modes)
                 print(f"Display mode: {self.display_modes[self.display_mode]}")
-            elif key == self.wnd.keys.P:
+            case ('press', keys.P, _):
                 # Print debug info
                 print(f"Light direction: {self.light.direction}")
                 print(f"Light position: {self.light.position}")
                 print(f"Light target: {self.light.target}")
                 print(f"Light near/far: {self.light.near}/{self.light.far}")
                 print(f"Shadow map size: {self.shadow_system.shadow_map.width}x{self.shadow_system.shadow_map.height}")
+            case ('press', keys.C, _):
+                self.debug_mode = not self.debug_mode
+                print(f"Debug mode: {'on' if self.debug_mode else 'off'}")
 
     def on_mouse_drag_event(self, x, y, dx, dy):
         # Simple camera orbit on mouse drag
