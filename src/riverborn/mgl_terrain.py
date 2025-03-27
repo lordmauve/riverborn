@@ -1,6 +1,8 @@
 import importlib.resources
 from itertools import product
+import math
 from pathlib import Path
+import random
 import sys
 import moderngl
 import moderngl_window as mglw
@@ -14,6 +16,7 @@ import glm
 from riverborn import picking, terrain
 from riverborn.blending import blend_func
 from riverborn.camera import Camera
+from riverborn.scene import Model, Scene
 from riverborn.shader import load_shader
 
 from .ripples import WaterSimulation
@@ -76,63 +79,13 @@ def load_env_map(ctx: moderngl.Context) -> moderngl.TextureCube:
     return cube
 
 
-with importlib.resources.as_file(importlib.resources.files() / 'resources') as resource_dir:
-    pass
-
-
 SUN_DIR = glm.normalize(glm.vec3(1, 1, 1))
 
-
-class TextureAlphaProgram(scene.MeshProgram):
-
-    def __init__(self) -> None:
-        super().__init__(program=load_shader('texture_alpha'))
-
-    def draw(
-        self,
-        mesh: scene.Mesh,
-        projection_matrix: glm.mat4,
-        model_matrix: glm.mat4,
-        camera_matrix: glm.mat4,
-        time: float = 0.0,
-    ) -> None:
-        assert self.program is not None, "There is no program to draw"
-        assert mesh.vao is not None, "There is no vao to render"
-        assert mesh.material is not None, "There is no material to render"
-        assert (
-            mesh.material.mat_texture is not None
-        ), "The material does not have a texture to render"
-        assert (
-            mesh.material.mat_texture.texture is not None
-        ), "The material texture is not linked to a texture, so it can not be rendered"
-
-        mesh.material.mat_texture.texture.use()
-        self.program["texture0"].value = 0
-        self.program["m_proj"].write(projection_matrix)
-        self.program["m_model"].write(model_matrix)
-        self.program["m_view"].write(camera_matrix)
-        self.program["sun_dir"] = SUN_DIR
-        mesh.vao.render(self.program)
-
-    def apply(self, mesh: scene.Mesh) -> scene.MeshProgram | None:
-        if not mesh.material:
-            return None
-
-        if not mesh.attributes.get("NORMAL"):
-            return None
-
-        if not mesh.attributes.get("TEXCOORD_0"):
-            return None
-
-        if mesh.material.mat_texture is not None:
-            return self
-
-        return None
 
 
 class WaterApp(mglw.WindowConfig):
     gl_version = (3, 3)
-    title = "Water Plane with GPU Height Map, Cube Map & Depth-based Transparency"
+    title = "Riverborn"
     window_size = (1920, 1080)
     aspect_ratio = None  # Let the window determine the aspect ratio.
     resizable = False
@@ -147,21 +100,27 @@ class WaterApp(mglw.WindowConfig):
         self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
 
         self.terrain = Instance(
-            terrain.make_terrain(100, 100, 100, 10, 0.1),
+            terrain.make_terrain(100, 200, 200, 10, 0.03),
             load_shader('diffuse'),
             create_noise_texture(1024, color=(0.6, 0.5, 0.4))
         )
 
-        with importlib.resources.as_file(importlib.resources.files('riverborn') / 'models') as resource_dir:
-            self.resource_dir = resource_dir
-            self.plant = self.load_scene(resource_dir / 'fern.obj')
-            self.canoe = self.load_scene(resource_dir / 'canoe.glb')
+        prog: moderngl.Program = load_shader('texture_alpha')
 
-        self.plant.prepare()
-        self.plant.apply_mesh_programs([TextureAlphaProgram()])
+        self.scene = Scene()
+        plant: Model = self.scene.load('fern.obj', prog, capacity=100)
+
+        for _ in range(200):
+            inst: Instance = self.scene.add(plant)
+            inst.pos = (random.uniform(-100, 100), 1, random.uniform(-100, 100))
+            inst.rotate(random.uniform(0, 2 * math.pi), glm.vec3(0, 1, 0))
+            inst.scale = glm.vec3(random.uniform(0.05, 0.12))
+            inst.update()
+
+        with importlib.resources.as_file(importlib.resources.files('riverborn') / 'models') as resource_dir:
+            self.canoe = self.load_scene(resource_dir / 'canoe.glb')
         self.canoe.prepare()
 
-        self.plant.matrix *= glm.scale(glm.vec3(0.1 , 0.1, 0.1))
         self.canoe.matrix *= glm.scale(glm.vec3(10, 10, 10))
 
         # Create the camera.
@@ -275,7 +234,7 @@ class WaterApp(mglw.WindowConfig):
         self.terrain.render(self.camera)
 
         with self.ctx.scope(enable_only=moderngl.CULL_FACE | moderngl.DEPTH_TEST):
-            self.plant.draw(self.camera.get_proj_matrix(), self.camera.get_view_matrix())
+            self.scene.draw(self.camera, SUN_DIR)
             self.canoe.draw(self.camera.get_proj_matrix(), self.camera.get_view_matrix())
 
         self.water_prog["env_cube"].value = 1

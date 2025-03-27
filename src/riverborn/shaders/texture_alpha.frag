@@ -7,7 +7,7 @@ uniform sampler2D texture0;
 uniform vec3 sun_dir;
 
 out vec4 f_color;
-const float ambient = 0.5;
+const float ambient = 0.1;
 
 void main() {
     vec4 diffuse = texture(texture0, uv);

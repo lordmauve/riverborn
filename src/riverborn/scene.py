@@ -24,6 +24,7 @@ import numpy as np
 import glm
 import random
 import math
+import weakref
 from typing import List, Dict
 
 from riverborn.camera import Camera
@@ -70,6 +71,7 @@ class Model:
         self.instance_matrices = np.zeros((capacity, 4, 4), dtype='f4')
         self.instances_dirty = False
         self.instance_buffer = ctx.buffer(reserve=capacity * 16 * 4)
+        self.instance_refs = weakref.WeakValueDictionary()
 
         vertex_stride = 8
         for mesh_name, mesh_obj in mesh.meshes.items():
@@ -132,12 +134,13 @@ class Model:
         self.textures[path] = texture
         return texture
 
-    def add_instance(self, matrix: glm.mat4) -> int:
+    def add_instance(self, matrix: glm.mat4, instance=None) -> int:
         """
         Add a new instance matrix to the model, resizing if capacity is exceeded.
 
         Args:
             matrix: The transformation matrix for the new instance
+            instance: The Instance object associated with this matrix (optional)
 
         Returns:
             Index of the instance in the buffer
@@ -150,6 +153,11 @@ class Model:
         self.instance_matrices[index] = matrix
         self.instance_count += 1
         self.instances_dirty = True
+
+        # Store a weak reference to the instance at this index
+        if instance is not None:
+            self.instance_refs[index] = instance
+
         return index
 
     def update_instance(self, index: int, matrix: glm.mat4) -> None:
@@ -208,17 +216,55 @@ class Instance:
     """
     def __init__(self, model: Model) -> None:
         self.model = model
-        self.pos = glm.vec3(0, 0, 0)
-        self.rot = glm.quat(1, 0, 0, 0)
-        self.scale = glm.vec3(1, 1, 1)
-        self.index = model.add_instance(self.matrix)
+        self._pos = glm.vec3(0, 0, 0)
+        self._rot = glm.quat(1, 0, 0, 0)
+        self._scale = glm.vec3(1, 1, 1)
+        self.index = model.add_instance(self.matrix, self)  # Pass self to model
+        self._deleted = False
+
+    @property
+    def pos(self) -> glm.vec3:
+        return self._pos
+
+    @pos.setter
+    def pos(self, value):
+        if not isinstance(value, glm.vec3):
+            self._pos = glm.vec3(*value)
+        else:
+            self._pos = value
+        self.model.update_instance(self.index, self.matrix)
+
+    @property
+    def rot(self) -> glm.quat:
+        return self._rot
+
+    @rot.setter
+    def rot(self, value):
+        if not isinstance(value, glm.quat):
+            # Expecting a tuple (w, x, y, z) or similar.
+            self._rot = glm.quat(*value)
+        else:
+            self._rot = value
+        self.model.update_instance(self.index, self.matrix)
+
+    @property
+    def scale(self) -> glm.vec3:
+        return self._scale
+
+    @scale.setter
+    def scale(self, value):
+        if not isinstance(value, glm.vec3):
+            self._scale = glm.vec3(*value)
+        else:
+            self._scale = value
+        self.model.update_instance(self.index, self.matrix)
 
     @property
     def matrix(self) -> glm.mat4:
-        """Compute transformation matrix for this instance."""
+        """Compute transformation matrix using translation, rotation, and scale."""
         return glm.scale(
-            glm.translate(self.pos) * glm.mat4(self.rot),
-            glm.vec3(self.scale)
+            glm.translate(self._pos) * glm.mat4(self._rot),
+            self._scale
         )
 
     def update(self) -> None:
@@ -226,6 +272,70 @@ class Instance:
         Recalculate and upload the transformation matrix to the model's buffer.
         """
         self.model.update_instance(self.index, self.matrix)
+
+    def translate(self, delta) -> None:
+        """
+        Translate the instance by the given delta.
+        Accepts a glm.vec3 or an iterable convertible to glm.vec3.
+        """
+        if not isinstance(delta, glm.vec3):
+            delta = glm.vec3(*delta)
+        self.pos = self.pos + delta  # setter is called, which updates the instance
+
+    def rotate(self, angle, axis) -> None:
+        """
+        Rotate the instance by a given angle (in radians) about the given axis.
+        Axis can be a glm.vec3 or any iterable convertible to glm.vec3.
+        """
+        if not isinstance(axis, glm.vec3):
+            axis = glm.vec3(*axis)
+        q = glm.angleAxis(angle, axis)
+        self.rot = q * self.rot  # setter is called, which updates the instance
+
+    def scale_by(self, factor) -> None:
+        """
+        Scale the instance by the given factor.
+        Factor can be a scalar or an iterable convertible to glm.vec3.
+        """
+        if isinstance(factor, (int, float)):
+            self.scale = self.scale * factor
+        else:
+            if not isinstance(factor, glm.vec3):
+                factor = glm.vec3(*factor)
+            self.scale = self.scale * factor
+
+    def delete(self) -> None:
+        """
+        Delete this instance from its model.
+        The last instance's matrix is copied over to this slot and the count is decremented.
+        It also updates the index of any instance that was using the last slot.
+        """
+        if self._deleted:
+            return
+
+        last_index = self.model.instance_count - 1
+        if self.index != last_index:
+            # Get the instance that uses the last slot
+            last_instance_ref = self.model.instance_refs.get(last_index)
+            last_instance = last_instance_ref() if last_instance_ref else None
+
+            if last_instance:
+                # Update its index to point to the slot we're removing
+                last_instance.index = self.index
+
+                # Update the instance reference mapping
+                self.model.instance_refs[self.index] = self.model.instance_refs[last_index]
+
+            # Copy the last matrix to this slot
+            self.model.instance_matrices[self.index] = self.model.instance_matrices[last_index]
+            self.model.instances_dirty = True
+
+        # Remove the reference to the last slot
+        if last_index in self.model.instance_refs:
+            del self.model.instance_refs[last_index]
+
+        self.model.instance_count -= 1
+        self._deleted = True
 
 
 class Scene:
@@ -327,8 +437,8 @@ class SceneDemo(mglw.WindowConfig):
 
         for _ in range(200):
             inst: Instance = self.scene.add(plant)
-            inst.pos = glm.vec3(random.uniform(-100, 100), 1, random.uniform(-100, 100))
-            inst.rot = glm.angleAxis(random.uniform(0, 2 * math.pi), glm.vec3(0, 1, 0))
+            inst.pos = (random.uniform(-100, 100), 1, random.uniform(-100, 100))
+            inst.rotate(random.uniform(0, 2 * math.pi), glm.vec3(0, 1, 0))
             inst.scale = glm.vec3(0.1)
             inst.update()
 

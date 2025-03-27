@@ -14,7 +14,7 @@ def create_noise_texture(size: int = 256, color=(1.0, 1.0, 1.0)):
     ctx = mglw.ctx()
     tex_width, tex_height = size, size
     texture_data = np.zeros((tex_height, tex_width, 3), dtype=np.uint8)
-    texture_noise_scale = 0.1
+    texture_noise_scale = 0.05
     for i in range(tex_height):
         for j in range(tex_width):
             t = noise.pnoise2(
