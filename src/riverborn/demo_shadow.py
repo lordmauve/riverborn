@@ -49,7 +49,7 @@ class ShadowMappingDemo(mglw.WindowConfig):
         # Create a directional light
         self.light = Light(
             direction=[0.5, -0.8, -0.3],
-            color=[1.0, 1.0, 1.0],
+            color=[1.0, 0.9, 0.8],
             ambient=[0.2, 0.2, 0.2],
             ortho_size=50.0
         )
@@ -103,7 +103,7 @@ class ShadowMappingDemo(mglw.WindowConfig):
             angle = self.time * 0.5
             self.light.direction = glm.normalize(glm.vec3(
                 math.sin(angle),
-                -0.33,
+                -1.2,
                 math.cos(angle)
             ))
             self.light.update_matrices()
