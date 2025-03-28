@@ -58,8 +58,7 @@ class ShadowDebugDemo(mglw.WindowConfig):
         )
 
         # Create the shadow system
-        self.shadow_system = ShadowSystem(shadow_map_size=1024)
-        self.shadow_system.set_light(self.light)
+        self.shadow_system = ShadowSystem(self.light, shadow_map_size=1024)
 
         # Time tracking
         self.time = 0

@@ -17,9 +17,9 @@ shaders = files('riverborn') / "shaders"
 
 def preprocess_shader(
     source: str,
-    defines: Dict[str, str] = None,
-    include_dirs: List[Any] = None,
-    processed_includes: Set[str] = None,
+    defines: Optional[Dict[str, str]] = None,
+    include_dirs: Optional[List[Any]] = None,
+    processed_includes: Optional[Set[str]] = None,
     source_filename: str = "<string>",
 ) -> Union[str, Tuple[str, List[SourceLoc]]]:
     """Preprocess a shader source adding support for simple #include and #ifdef directives.
@@ -283,7 +283,7 @@ def format_shader_with_line_info(source: str, source_locs: List[SourceLoc]) -> s
     return '\n'.join(annotated_lines)
 
 
-def load_shader(name: str, *, vert: str | None = None, frag: str = None, **shader_defines: str) -> moderngl.Program:
+def load_shader(name: str, *, vert: str | None = None, frag: Optional[str] = None, **shader_defines: str) -> 'BindableProgram':
     """Load a shader from the shaders directory with preprocessing.
 
     Args:
@@ -356,12 +356,12 @@ def load_shader(name: str, *, vert: str | None = None, frag: str = None, **shade
                 fragment_shader=frag_processed,
             )
             program.label = name
-            enrich_program(program)
+            myprogram = enrich_program(program)
 
             # Store in cache
-            shader_cache[cache_key] = program
+            shader_cache[cache_key] = myprogram
 
-            return program
+            return myprogram
         except moderngl.Error as e:
             # Handle shader compilation errors with better diagnostics
             error_msg = str(e)
@@ -389,19 +389,12 @@ def load_shader(name: str, *, vert: str | None = None, frag: str = None, **shade
         raise
 
 
-def enrich_program(program: moderngl.Program) -> None:
-    uniformdefs = {}
-
-    for member in program:
-        obj = program.get(member, None)
-        if type(obj).__name__ == 'Uniform':
-            uniformdefs[member] = obj
-
-    def bind(**uniforms):
+class BindableProgram(moderngl.Program):
+    def bind(self, **uniforms):
         missing = None
         next_tex = 0
 
-        for k, obj in uniformdefs.items():
+        for k, obj in self.uniformdefs.items():
             val = uniforms.pop(k, None)
             if val is None:
                 if missing is None:
@@ -420,9 +413,20 @@ def enrich_program(program: moderngl.Program) -> None:
                     except struct.error as e:
                         raise ValueError(f"Invalid value for {obj.fmt} uniform '{k}': {val!r}") from e
         for k, v in uniforms.items():
-            warnings.warn(f"Unused uniform '{k}' passed to {program.label}: {type(v)}", UserWarning, stacklevel=2)
+            warnings.warn(f"Unused uniform '{k}' passed to {self.label}: {type(v)}", UserWarning, stacklevel=2)
         if missing:
             raise ValueError(f"Missing uniforms: {', '.join(missing)}")
 
 
-    program.bind = bind
+def enrich_program(program: moderngl.Program) -> BindableProgram:
+    uniformdefs: dict[str, moderngl.Uniform] = {}
+
+    for member in program:
+        obj = program.get(member, None)
+        if isinstance(obj, moderngl.Uniform):
+            uniformdefs[member] = obj
+
+    program.__class__= BindableProgram
+    program.uniformdefs = uniformdefs
+    return program
+

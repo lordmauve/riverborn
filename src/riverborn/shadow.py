@@ -5,7 +5,8 @@ import numpy as np
 from pyglm import glm
 from riverborn.camera import Camera
 from riverborn.scene import Scene, Model, WavefrontModel, TerrainModel, Light, Material
-from riverborn.shader import load_shader
+from riverborn.shader import load_shader, BindableProgram
+
 
 class ShadowMap:
     """Shadow map implementation.
@@ -38,10 +39,7 @@ class ShadowMap:
         # Create default depth materials
         self.depth_material = Material(alpha_test=True)
 
-        # These will be created on-demand in get_depth_shader
-        self.depth_shaders = {}
-
-    def get_depth_shader(self, instanced=True, material=None) -> moderngl.Program:
+    def get_depth_shader(self, instanced=True, material=None) -> BindableProgram:
         """Get an appropriate depth shader based on material properties.
 
         Args:
@@ -62,14 +60,7 @@ class ShadowMap:
         if instanced:
             defines['INSTANCED'] = '1'
 
-        # Create a cache key based on the defines
-        cache_key = "&".join(f"{k}={v}" for k, v in sorted(defines.items()))
-
-        # Check if we already have this shader
-        if cache_key not in self.depth_shaders:
-            self.depth_shaders[cache_key] = load_shader('depth', **defines)
-
-        return self.depth_shaders[cache_key]
+        return load_shader('depth', **defines)
 
 
 class ShadowSystem:
@@ -79,7 +70,7 @@ class ShadowSystem:
     the scene from the light's perspective into a shadow map, then using
     that shadow map when rendering the scene normally to add shadows.
     """
-    def __init__(self, shadow_map_size: int = 2048, use_pcf: bool = True):
+    def __init__(self, light: Light, shadow_map_size: int = 2048, use_pcf: bool = True):
         """Initialize the shadow system.
 
         Args:
@@ -87,13 +78,10 @@ class ShadowSystem:
             use_pcf: Whether to use percentage closer filtering for smoother shadows
         """
         self.shadow_map = ShadowMap(shadow_map_size, shadow_map_size)
-        self.light = None
+        self.light = light
         self.use_pcf = use_pcf
 
-        # Shadow shaders will be created on-demand based on material properties
-        self.shadow_shaders = {}
-
-    def get_shadow_shader(self, instanced=True, material=None) -> moderngl.Program:
+    def get_shadow_shader(self, instanced=True, material=None) -> BindableProgram:
         """Get an appropriate shadow shader based on material properties.
 
         Args:
@@ -112,18 +100,7 @@ class ShadowSystem:
         if material:
             defines.update(material.to_defines())
 
-        # Create a cache key based on the defines
-        cache_key = "&".join(f"{k}={v}" for k, v in sorted(defines.items()))
-
-        # Check if we already have this shader
-        if cache_key not in self.shadow_shaders:
-            self.shadow_shaders[cache_key] = load_shader('shadow', **defines)
-
-        return self.shadow_shaders[cache_key]
-
-    def set_light(self, light: Light):
-        """Set the light used for shadow mapping."""
-        self.light = light
+        return load_shader('shadow', **defines)
 
     def render_depth(self, scene: Scene):
         """Render the scene to the shadow map from the light's perspective.
@@ -149,12 +126,7 @@ class ShadowSystem:
         # Render each model in the scene
         for model_name, model in scene.models.items():
             # Skip models that don't cast shadows
-            # Extract material information from the model if possible
-            material = None
-            if hasattr(model, 'material'):
-                material = model.material
-            elif hasattr(model.program, 'material'):
-                material = model.program.material
+            material = model.material
 
             # Skip rendering this model if it doesn't cast shadows
             if material and not material.cast_shadows:
@@ -166,10 +138,6 @@ class ShadowSystem:
             # Render each part of the model
             for part in model.parts:
                 # Get the depth shader based on the model's properties
-                # Extract material from the model's program label (shader name)
-                # This is an approximation - ideally models would store material info
-                use_alpha_test = 'texture_alpha' in getattr(model.program, 'label', '')
-                material = Material(alpha_test=use_alpha_test)
 
                 # Get appropriate depth shader
                 depth_shader = self.shadow_map.get_depth_shader(instanced=True, material=material)
@@ -194,7 +162,7 @@ class ShadowSystem:
                 else:
                     # Default case - attempt to use just position component
                     vertex_format = '3f'  # position only
-                    attrs = 'in_position'
+                    attrs = 'in_position',
 
                 # Extract just the position component for depth pass
                 vao_args = [
@@ -216,21 +184,12 @@ class ShadowSystem:
 
         # Restore viewport and FBO
         ctx.viewport = previous_viewport
-        self.ctx.screen.use()
+        ctx.screen.use()
 
     def setup_shadow_shader(self, camera: Camera, model: Model, **uniforms):
         """Set up the shadow shader for a specific model."""
         # Choose the appropriate shader for the model
-        # Extract material properties from the model's program label (shader name)
-        # This is an approximation - ideally models would store material info
-        material = Material()
-        if hasattr(model.program, 'label'):
-            if 'texture_alpha' in model.program.label:
-                material.alpha_test = True
-            if 'translucent' in model.program.label:
-                material.translucent = True
-
-        shader = self.get_shadow_shader(instanced=True, material=material)
+        shader = self.get_shadow_shader(instanced=True, material=model.material)
         shader.bind(
             m_view=camera.get_view_matrix(),
             m_proj=camera.get_proj_matrix(),
@@ -246,32 +205,3 @@ class ShadowSystem:
             **uniforms
         )
         return shader
-
-    def render_scene_with_shadows(self, scene: Scene, camera: Camera):
-        """Render a complete scene with shadows applied.
-
-        Args:
-            scene: The scene to render
-            camera: The camera to use for rendering
-        """
-        # First render the depth pass from light's perspective
-        self.render_depth(scene)
-
-        # Setup viewport for main rendering
-        ctx = mglw.ctx()
-        ctx.enable(moderngl.DEPTH_TEST)
-
-        # Now render the scene with shadows
-        for model_name, model in scene.models.items():
-            # Set up the shadow shader for this model
-            shader = self.setup_shadow_shader(camera, model)
-
-            # Temporarily override the model's program
-            original_program = model.program
-            model.program = shader
-
-            # Render the model with our shadow shader
-            model._render(camera, -self.light.direction)
-
-            # Restore the original program
-            model.program = original_program

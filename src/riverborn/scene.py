@@ -18,6 +18,7 @@ The system supports:
 from contextlib import suppress
 import importlib.resources
 from pathlib import Path
+import typing
 import imageio
 import noise
 import pywavefront
@@ -33,10 +34,15 @@ from dataclasses import dataclass, field, asdict
 from typing import Dict, Any
 
 from riverborn.camera import Camera
-from riverborn.shader import load_shader
+from riverborn.shader import load_shader, BindableProgram
 from riverborn.terrain import make_terrain, Mesh
 from pyglm.glm import array
 
+if typing.TYPE_CHECKING:
+    from riverborn.shadow import ShadowSystem
+
+
+vec3ish = Union[glm.vec3, tuple[float, float, float], list[float]]
 
 class Light:
     """Directional light with shadow mapping capabilities.
@@ -52,14 +58,14 @@ class Light:
         shadows: Whether this light casts shadows
     """
     def __init__(self,
-                 direction: glm.vec3,
-                 color: glm.vec3 = glm.vec3(1.0),
-                 ambient: glm.vec3 = glm.vec3(0.1),
+                 direction: vec3ish,
+                 color: vec3ish = glm.vec3(1.0),
+                 ambient: vec3ish = glm.vec3(0.1),
                  distance: float = 100.0,
                  ortho_size: float = 50.0,
                  near: float = 1.0,
                  far: float = 200.0,
-                 target: glm.vec3 = glm.vec3(0.0),
+                 target: vec3ish = glm.vec3(0.0),
                  shadows: bool = True):
         """Initialize the light.
 
@@ -114,33 +120,33 @@ class Model:
 
     Attributes:
         ctx: ModernGL context
-        program: Shader program used for this model
         parts: List of model parts (per material) each with its own VAO
         instance_matrices: CPU-side array of transformation matrices
         instance_buffer: GPU buffer for instance matrices
         instance_capacity: Current allocated capacity (resized as needed)
         instance_count: Number of active instances
         instances_dirty: Flag indicating whether GPU buffer needs update
+        material: Material properties for this model
     """
-    textures = {}
+    textures: dict[str, moderngl.Texture] = {}
 
-    def __init__(self, ctx: moderngl.Context, program: moderngl.Program, capacity: int = 100) -> None:
+    def __init__(self, ctx: moderngl.Context, capacity: int = 100, material: Optional['Material'] = None) -> None:
         """
         Initialize the model by creating instance buffers.
 
         Args:
             ctx: ModernGL context
-            program: Shader program to use
             capacity: Initial number of instances to support
+            material: Material properties for this model
         """
         self.ctx = ctx
-        self.program = program
         self.parts = []
         self.instance_count = 0
         self.instance_matrices = array.zeros(capacity, glm.mat4)
         self.instances_dirty = False
         self.instance_buffer = ctx.buffer(reserve=capacity * 16 * 4)
         self.instance_refs = weakref.WeakValueDictionary()
+        self.material = material or Material()
 
     def load_texture(self, path: str) -> moderngl.Texture:
         """Load and create a ModernGL texture from an image file."""
@@ -211,9 +217,39 @@ class Model:
         self.instance_matrices[index] = matrix
         self.instances_dirty = True
 
-    def _render(self, camera: Camera, light: Light) -> None:
+    def _get_appropriate_shader(self, light: Light | None) -> BindableProgram:
+        """Get the appropriate shader based on light and material properties.
+
+        Args:
+            light: Light information to determine if shadows are needed
+
+        Returns:
+            Compiled shader program appropriate for current rendering state
         """
-        Render the model using instanced rendering.
+        from riverborn.shader import load_shader
+
+        light = light or Light(direction=glm.vec3(1, -1, 1))
+        # Determine shader type based on shadow state and material properties
+        shader_type = 'shadow' if (light.shadows and self.material.receive_shadows) else 'diffuse'
+
+        # For alpha tested materials, use texture_alpha when not using shadows
+        if self.material.alpha_test and shader_type != 'shadow':
+            shader_type = 'texture_alpha'
+
+        # Set up shader defines based on material properties
+        defines = {
+            'INSTANCED': '1',  # Always use instancing for models
+        }
+
+        # Add material defines if using a shadow shader
+        if shader_type == 'shadow':
+            defines.update(self.material.to_defines())
+
+        return load_shader(shader_type, **defines)
+
+    def draw(self, camera: Camera, light: Light) -> None:
+        """
+        Render the model using instanced rendering with appropriate shader.
 
         Args:
             camera: Camera object
@@ -221,54 +257,63 @@ class Model:
         """
         self.flush_instances()
 
+        # Get the appropriate shader based on current state
+        shader = self._get_appropriate_shader(light)
+
         for part in self.parts:
-            # Basic uniform values that all shaders need
+            # Create uniform dict based on shader and rendering state
             uniforms = {
                 'm_proj': camera.get_proj_matrix(),
                 'm_view': camera.get_view_matrix(),
                 'light_dir': -light.direction,
                 'light_color': light.color,
                 'ambient_color': light.ambient,
-                'light_space_matrix': light.light_space_matrix,
             }
 
-            # Add part-specific uniforms
+            # Add part-specific uniforms (textures, etc.)
             uniforms.update(part['uniforms'])
 
-            # Check if the shader is expecting shadow-related uniforms by checking for "RECEIVE_SHADOWS" in defines
-            # This is a bit of a hack - ideally we'd check the actual uniforms required by the shader
-            if hasattr(self.program, 'label') and 'shadow' in self.program.label.lower():
-                # Add shadow-related uniforms with default/dummy values
-                uniforms.update({
-                    'camera_pos': camera.eye,
-                    'shadow_map': 0,  # Texture unit 0
-                    'use_pcf': False,
-                    'pcf_radius': 1.0,
-                    'shadow_bias': 0.01,
-                })
+            # Add shadow-specific uniforms if needed
+            if light.shadows and self.material.receive_shadows:
+                # Get the shadow system from light if available
+                shadow_system = getattr(light, '_shadow_system', None)
+                if shadow_system:
+                    shadow_map = shadow_system.shadow_map.depth_texture
+                    uniforms.update({
+                        'camera_pos': camera.eye,
+                        'light_space_matrix': light.light_space_matrix,
+                        'shadow_map': shadow_map,
+                        'use_pcf': shadow_system.use_pcf,
+                        'pcf_radius': 1.0,
+                        'shadow_bias': 0.01,
+                    })
 
-            # Bind all uniforms
-            self.program.bind(**uniforms)
-            part['vao'].render(instances=self.instance_count)
+            # Create a new vao if program changed
+            vao = None
+            current_vao = part.get('vao')
+            if current_vao and hasattr(current_vao, 'program') and current_vao.program != shader:
+                # Programs differ, need to recreate VAO
+                if part.get('indexed', False):
+                    vao = self.ctx.vertex_array(
+                        shader,
+                        part['vao_args'],
+                        part['ibo']
+                    )
+                else:
+                    vao = self.ctx.vertex_array(
+                        shader,
+                        part['vao_args']
+                    )
+                # Update the VAO in the part
+                if 'vao' in part:
+                    part['vao'].release()
+                part['vao'] = vao
+            else:
+                vao = current_vao
 
-    def _render_with_shadows(self, camera: Camera, light: Light, shadow_system) -> None:
-        # Set up shadow shader with common uniforms
-        for part in self.parts:
-            self.program.bind(
-                m_proj=camera.get_proj_matrix(),
-                m_view=camera.get_view_matrix(),
-                light_dir=-light.direction,
-                light_color=light.color,
-                ambient_color=light.ambient,
-                camera_pos=camera.eye,
-                light_space_matrix=light.light_space_matrix,
-                shadow_map=shadow_system.shadow_map.depth_texture,
-                use_pcf=shadow_system.use_pcf,
-                pcf_radius=1.0,
-                shadow_bias=0.01,
-                **part['uniforms']
-            )
-            part['vao'].render(instances=self.instance_count)
+            # Bind all uniforms and render
+            shader.bind(**uniforms)
+            vao.render(instances=self.instance_count)
 
     def flush_instances(self):
         if self.instances_dirty:
@@ -293,7 +338,7 @@ class WavefrontModel(Model):
     A 3D model loaded from an OBJ file with support for instanced rendering.
     """
 
-    def __init__(self, mesh: pywavefront.Wavefront, ctx: moderngl.Context, program: moderngl.Program, capacity: int = 100) -> None:
+    def __init__(self, mesh: pywavefront.Wavefront, ctx: moderngl.Context, capacity: int = 100, material: Optional['Material'] = None) -> None:
         """
         Initialize the model by creating VAOs for each mesh part and reserving
         space for per-instance data.
@@ -301,10 +346,10 @@ class WavefrontModel(Model):
         Args:
             mesh: PyWavefront mesh object
             ctx: ModernGL context
-            program: Shader program to use
             capacity: Initial number of instances to support
+            material: Material properties for this model
         """
-        super().__init__(ctx, program, capacity)
+        super().__init__(ctx, capacity, material)
 
         for mesh_name, mesh_obj in mesh.meshes.items():
             for material in mesh_obj.materials:
@@ -323,16 +368,18 @@ class WavefrontModel(Model):
                 if hasattr(material, 'faces') and material.faces:
                     indices = np.array([i for face in material.faces for i in face], dtype='i4')
                     ibo = ctx.buffer(indices.tobytes())
-                    vao = ctx.vertex_array(program, [
+                    vao = ctx.vertex_array(self._get_appropriate_shader(light=None), [
                         (vbo, '2f 3f 3f', 'in_texcoord_0', 'in_normal', 'in_position'),
                         (self.instance_buffer, '16f4/i', 'm_model')
                     ], ibo)
                     self.parts.append({
                         "vbo": vbo, "ibo": ibo, "vao": vao, "indexed": True,
-                        'uniforms': uniforms
+                        'uniforms': uniforms,
+                        'vao_args': [(vbo, '2f 3f 3f', 'in_texcoord_0', 'in_normal', 'in_position'),
+                                     (self.instance_buffer, '16f4/i', 'm_model')]
                     })
                 else:
-                    vao = ctx.vertex_array(program, [
+                    vao = ctx.vertex_array(self._get_appropriate_shader(light=None), [
                         (vbo, '2f 3f 3f', 'in_texcoord_0', 'in_normal', 'in_position'),
                         (self.instance_buffer, '16f4/i', 'm_model')
                     ])
@@ -340,7 +387,9 @@ class WavefrontModel(Model):
                         "vbo": vbo,
                         "vao": vao,
                         "indexed": False,
-                        'uniforms': uniforms
+                        'uniforms': uniforms,
+                        'vao_args': [(vbo, '2f 3f 3f', 'in_texcoord_0', 'in_normal', 'in_position'),
+                                     (self.instance_buffer, '16f4/i', 'm_model')]
                     })
 
 
@@ -349,7 +398,7 @@ class TerrainModel(Model):
     A 3D model created from a terrain mesh with support for instanced rendering.
     """
 
-    def __init__(self, mesh: Mesh, ctx: moderngl.Context, program: moderngl.Program,
+    def __init__(self, mesh: Mesh, ctx: moderngl.Context, material: Optional['Material'] = None,
                  texture: Optional[Union[moderngl.Texture, np.ndarray]] = None,
                  capacity: int = 1) -> None:
         """
@@ -358,11 +407,11 @@ class TerrainModel(Model):
         Args:
             mesh: Terrain mesh object
             ctx: ModernGL context
-            program: Shader program to use
+            material: Material properties for this model
             texture: Texture or numpy array to use for the terrain
             capacity: Initial number of instances to support
         """
-        super().__init__(ctx, program, capacity)
+        super().__init__(ctx, capacity, material)
 
         # Create the VBO
         vbo = ctx.buffer(mesh.vertices.tobytes())
@@ -378,7 +427,7 @@ class TerrainModel(Model):
             uniforms = {'diffuse_tex': self.create_texture_from_array(texture)}
 
         # Create the VAO
-        vao = ctx.vertex_array(program, [
+        vao = ctx.vertex_array(self._get_appropriate_shader(light=None), [
             (vbo, '3f 3f 2f', 'in_position', 'in_normal', 'in_texcoord_0'),
             (self.instance_buffer, '16f4/i', 'm_model')
         ], ibo)
@@ -390,6 +439,8 @@ class TerrainModel(Model):
             "vao": vao,
             "indexed": True,
             "uniforms": uniforms,
+            'vao_args': [(vbo, '3f 3f 2f', 'in_position', 'in_normal', 'in_texcoord_0'),
+                         (self.instance_buffer, '16f4/i', 'm_model')]
         })
 
 
@@ -575,9 +626,9 @@ class Scene:
         # Default material properties
         self.default_material = Material()
         # Shadow system (created on demand)
-        self._shadow_system = None
+        self._shadow_system: ShadowSystem | None = None
 
-    def _get_shader_for_model(self, base_shader: str, material: Material = None, **extra_defines) -> moderngl.Program:
+    def _get_shader_for_model(self, base_shader: str, material: Optional[Material] = None, **extra_defines) -> BindableProgram:
         """
         Get an appropriate shader for a model based on material properties and rendering requirements.
 
@@ -606,7 +657,7 @@ class Scene:
         # Load and return the shader
         return load_shader(base_shader, **defines)
 
-    def load_wavefront(self, filename: str, material: Material = None, capacity: int = 100) -> WavefrontModel:
+    def load_wavefront(self, filename: str, material: Optional[Material] = None, capacity: int = 100) -> WavefrontModel:
         """
         Load an OBJ model from the assets package and create its VAO and buffers.
 
@@ -620,20 +671,18 @@ class Scene:
         """
         # Determine the appropriate shader based on material properties
         mat = material or self.default_material
-        shader_name = 'shadow' if mat.receive_shadows else 'texture_alpha'
-        program = self._get_shader_for_model(shader_name, mat)
 
         files = importlib.resources.files('riverborn')
         with importlib.resources.as_file(files / f'models/{filename}') as model_path:
             mesh = pywavefront.Wavefront(str(model_path), create_materials=True, collect_faces=True)
-        model = WavefrontModel(mesh, self.ctx, program, capacity)
+        model = WavefrontModel(mesh, self.ctx, capacity, material=mat)
         self.models[filename] = model
         return model
 
     def create_terrain(self, name: str, segments: int, width: float, depth: float,
                        height: float, noise_scale: float,
                        texture: Optional[Union[moderngl.Texture, np.ndarray]] = None,
-                       material: Material = None) -> TerrainModel:
+                       material: Optional[Material] = None) -> TerrainModel:
         """
         Create a terrain model and add it to the scene.
 
@@ -652,11 +701,8 @@ class Scene:
         """
         # Get appropriate shader for terrain
         mat = material or self.default_material
-        shader_name = 'shadow' if mat.receive_shadows else 'diffuse'
-        program = self._get_shader_for_model(shader_name, mat)
-
         terrain_mesh = make_terrain(segments, width, depth, height, noise_scale)
-        model = TerrainModel(terrain_mesh, self.ctx, program, texture)
+        model = TerrainModel(terrain_mesh, self.ctx, mat, texture)
         self.models[name] = model
         return model
 
@@ -687,21 +733,18 @@ class Scene:
             # Create shadow system on demand if needed
             if self._shadow_system is None:
                 from riverborn.shadow import ShadowSystem
-                self._shadow_system = ShadowSystem(shadow_map_size=2048)
-
-            # Set the light in the shadow system
-            self._shadow_system.set_light(light)
+                self._shadow_system = ShadowSystem(light, shadow_map_size=2048)
 
             # Render depth pass
             self._shadow_system.render_depth(self)
 
             # Render the scene with shadows
             for model in self.models.values():
-                model._render_with_shadows(camera, light, self._shadow_system)
+                model.draw(camera, light)
         else:
             # Regular drawing without shadows
             for model in self.models.values():
-                model._render(camera, light)
+                model.draw(camera, light)
 
     def destroy(self) -> None:
         """
@@ -736,89 +779,3 @@ def create_noise_texture(size: int = 256, color=(1.0, 1.0, 1.0)) -> np.ndarray:
     # Flip vertically to account for texture coordinate differences.
     texture_data = np.flipud(texture_data)
     return texture_data
-
-
-SUN_DIR = glm.normalize(glm.vec3(1, 1, 1))
-
-
-class SceneDemo(mglw.WindowConfig):
-    gl_version = (3, 3)
-    title = "Instanced rendering demo"
-    window_size = (1920, 1080)
-    aspect_ratio = None  # Let the window determine the aspect ratio.
-    resizable = False
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        # Create a shader program for the model.
-        plant_shader = load_shader('texture_alpha')
-        terrain_shader = load_shader('diffuse')
-
-        self.scene = Scene()
-
-        # Load a plant model
-        plant: WavefrontModel = self.scene.load_wavefront('fern.obj', plant_shader, capacity=100)
-
-        # Create a terrain model
-        terrain_texture = create_noise_texture(size=512, color=(0.6, 0.5, 0.4))
-        terrain: TerrainModel = self.scene.create_terrain(
-            'terrain',
-            terrain_shader,
-            segments=100,
-            width=100,
-            depth=100,
-            height=10,
-            noise_scale=0.1,
-            texture=terrain_texture
-        )
-
-        # Initialize camera
-        self.camera = Camera(
-            eye=[0.0, 20.0, 50.0],
-            target=[0.0, 0.0, 0.0],
-            up=[0.0, 1.0, 0.0],
-            fov=70.0,
-            aspect=self.wnd.aspect_ratio,
-            near=0.1,
-            far=1000.0,
-        )
-        self.camera.set_aspect(self.wnd.aspect_ratio)
-        self.camera.look_at(glm.vec3(0, 0, 0))
-
-        # Create terrain instance
-        terrain_inst = self.scene.add(terrain)
-        terrain_inst.pos = (0, -5, 0)
-        terrain_inst.update()
-
-        # Create plant instances scattered over the terrain
-        for _ in range(200):
-            inst: Instance = self.scene.add(plant)
-            inst.pos = (random.uniform(-100, 100), 1, random.uniform(-100, 100))
-            inst.rotate(random.uniform(0, 2 * math.pi), glm.vec3(0, 1, 0))
-            inst.scale = glm.vec3(0.1)
-            inst.update()
-
-    def on_render(self, time, frame_time):
-        self.ctx.clear(0.5, 0.55, 0.7, 1.0)
-        self.ctx.enable(moderngl.DEPTH_TEST)
-        # Draw all models with their instances
-        self.scene.draw(self.camera, SUN_DIR)
-
-    def on_close(self):
-        self.scene.destroy()
-
-    def on_key_event(self, key, action, modifiers):
-        op = 'press' if action == self.wnd.keys.ACTION_PRESS else 'release'
-        keys = self.wnd.keys
-        match op, key, modifiers.shift:
-            case ('press', keys.ESCAPE, _):
-                sys.exit()
-
-            case ('press', keys.F12, False):
-                from .screenshot import screenshot
-                screenshot()
-
-
-def main():
-    import sys
-    mglw.run_window_config(SceneDemo)

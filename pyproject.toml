@@ -33,5 +33,24 @@ relative_to = "pyproject.toml"
 
 [dependency-groups]
 dev = [
+    "mypy>=1.15.0",
     "pytest>=8.3.5",
 ]
+
+[tool.mypy]
+files = [
+    "src/riverborn/scene.py",
+    "src/riverborn/shadow.py",
+    "src/riverborn/demo_shadow.py",
+]
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = [
+    "moderngl",
+    "moderngl_window",
+    "wasabigeom",
+    "noise",
+    "pywavefront",
+]
+ignore_missing_imports = true

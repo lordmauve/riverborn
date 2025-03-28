@@ -20,7 +20,6 @@ class ShadowMappingDemo(mglw.WindowConfig):
     gl_version = (3, 3)
     title = "Shadow Mapping Demo"
     window_size = (1280, 720)
-    aspect_ratio = None
     resizable = True
 
     def __init__(self, **kwargs):
