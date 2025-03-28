@@ -30,7 +30,7 @@ class ShadowMappingDemo(mglw.WindowConfig):
         self.ctx.enable(moderngl.DEPTH_TEST)
 
         # Create a shadow-capable shader
-        self.shadow_program = load_shader('shadow', defines={'INSTANCED': '1', 'ALPHA_TEST': '1'})
+        self.shadow_program = load_shader('shadow', INSTANCED=1, ALPHA_TEST=1)
 
         # Create the scene
         self.scene = Scene()

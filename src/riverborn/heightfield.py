@@ -59,7 +59,7 @@ class HeightfieldApp(mglw.WindowConfig):
         )
 
         # Create a shader program for the terrain
-        terrain_shader = load_shader('diffuse', defines={'INSTANCED': '1'})
+        terrain_shader = load_shader('diffuse', INSTANCED=1)
 
         # Generate terrain texture
         terrain_texture = create_noise_texture(size=512, color=(0.6, 0.5, 0.4))

@@ -283,7 +283,7 @@ def format_shader_with_line_info(source: str, source_locs: List[SourceLoc]) -> s
     return '\n'.join(annotated_lines)
 
 
-def load_shader(name: str, *, vert: str | None = None, frag: str = None, defines: dict = None) -> moderngl.Program:
+def load_shader(name: str, *, vert: str | None = None, frag: str = None, **shader_defines: str) -> moderngl.Program:
     """Load a shader from the shaders directory with preprocessing.
 
     Args:
@@ -299,6 +299,22 @@ def load_shader(name: str, *, vert: str | None = None, frag: str = None, defines
     frag = frag or name
 
     ctx = mglw.ctx()
+    if ctx.extra is None:
+        ctx.extra = {}
+
+    # Initialize shader cache if it doesn't exist
+    if 'shader_cache' not in ctx.extra:
+        ctx.extra['shader_cache'] = {}
+    shader_cache = ctx.extra['shader_cache']
+
+    # Create a cache key based on shader name, vert/frag paths, and defines
+    # Sort defines for consistent cache keys
+    defines_str = "&".join(f"{k}={v}" for k, v in sorted(shader_defines.items()))
+    cache_key = f"{name}:{vert}:{frag}:{defines_str}"
+
+    # Check if the shader is already in the cache
+    if cache_key in shader_cache:
+        return shader_cache[cache_key]
 
     try:
         # Load shader sources
@@ -307,9 +323,6 @@ def load_shader(name: str, *, vert: str | None = None, frag: str = None, defines
 
         vert_source = (shaders / vert_path).read_text()
         frag_source = (shaders / frag_path).read_text()
-
-        # Create a copy of defines to avoid modifying the original
-        shader_defines = defines.copy() if defines else {}
 
         # Preprocess shaders with source mapping
         vert_result = preprocess_shader(
@@ -344,6 +357,10 @@ def load_shader(name: str, *, vert: str | None = None, frag: str = None, defines
             )
             program.label = name
             enrich_program(program)
+
+            # Store in cache
+            shader_cache[cache_key] = program
+
             return program
         except moderngl.Error as e:
             # Handle shader compilation errors with better diagnostics

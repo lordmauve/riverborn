@@ -40,8 +40,8 @@ class ShadowMap:
         self.fbo = self.ctx.framebuffer(depth_attachment=self.depth_texture)
 
         # Load depth shader program
-        self.depth_shader_instanced = load_shader('depth', defines={'INSTANCED': '1', 'ALPHA_TEST': '1'})
-        self.depth_shader_uniform = load_shader('depth', defines={'ALPHA_TEST': '1'})
+        self.depth_shader_instanced = load_shader('depth', INSTANCED=1, ALPHA_TEST=1)
+        self.depth_shader_uniform = load_shader('depth', ALPHA_TEST=1)
 
 
 class ShadowSystem:
@@ -60,7 +60,7 @@ class ShadowSystem:
         """
         self.shadow_map = ShadowMap(shadow_map_size, shadow_map_size)
         self.light = None
-        self.shadow_shader_instanced = load_shader('shadow', defines={'INSTANCED': '1'})
+        self.shadow_shader_instanced = load_shader('shadow', INSTANCED=1)
         self.shadow_shader_uniform = load_shader('shadow')
         self.use_pcf = use_pcf
 
