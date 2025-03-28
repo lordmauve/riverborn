@@ -101,18 +101,37 @@ def recompute_normals(mesh: Mesh) -> Mesh:
     dx = xs[1] - xs[0]
     dz = zs[1] - zs[0]
 
-    # Compute normals using finite (central) differences.
-    vertex_normals = vertices["in_normal"].reshape(segments + 1, segments + 1, 3)
-    heights = vertices['in_position'][:, 1].reshape(segments + 1, segments + 1)
-    for i in range(segments + 1):
-        for j in range(segments + 1):
-            hL = heights[i, j - 1] if j > 0 else heights[i, j]
-            hR = heights[i, j + 1] if j < segments else heights[i, j]
-            hD = heights[i - 1, j] if i > 0 else heights[i, j]
-            hU = heights[i + 1, j] if i < segments else heights[i, j]
-            dX = (hR - hL) / (2 * dx)
-            dZ = (hU - hD) / (2 * dz)
-            n = np.array([-dX, 1.0, -dZ], dtype=np.float32)
-            n /= np.linalg.norm(n)
-            vertex_normals[i, j, :] = n
+    # Compute normals using finite (central) differences with numpy operations
+    heights = mesh.heights
+
+    # Create arrays for neighboring heights with proper edge handling
+    heights_left = np.roll(heights, 1, axis=1)
+    heights_left[:, 0] = heights[:, 0]  # Edge case
+
+    heights_right = np.roll(heights, -1, axis=1)
+    heights_right[:, -1] = heights[:, -1]  # Edge case
+
+    heights_down = np.roll(heights, 1, axis=0)
+    heights_down[0, :] = heights[0, :]  # Edge case
+
+    heights_up = np.roll(heights, -1, axis=0)
+    heights_up[-1, :] = heights[-1, :]  # Edge case
+
+    # Compute derivatives
+    dX = (heights_right - heights_left) / (2 * dx)
+    dZ = (heights_up - heights_down) / (2 * dz)
+
+    # Create normal vectors
+    normals = np.zeros((segments + 1, segments + 1, 3), dtype=np.float32)
+    normals[:, :, 0] = -dX
+    normals[:, :, 1] = 1.0
+    normals[:, :, 2] = -dZ
+
+    # Normalize normals
+    norm = np.sqrt(np.sum(normals**2, axis=2, keepdims=True))
+    normals = normals / norm
+
+    # Assign to vertex normals
+    vertices["in_normal"] = normals.reshape(-1, 3)
+
     return mesh
