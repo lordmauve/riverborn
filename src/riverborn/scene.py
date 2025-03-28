@@ -471,6 +471,7 @@ class TerrainModel(Model):
             capacity: Initial number of instances to support
         """
         super().__init__(ctx, capacity, material)
+        self.mesh = mesh
 
         # Create the VBO
         vbo = ctx.buffer(mesh.vertices.tobytes())
@@ -486,7 +487,7 @@ class TerrainModel(Model):
             uniforms = {'diffuse_tex': self.create_texture_from_array(texture)}
 
         vbotype = ('3f 3f 2f', 'in_position', 'in_normal', 'in_texcoord_0')
-        part = Part(
+        self.part = Part(
             vbo=vbo,
             ibo=ibo,
             indexed=True,
@@ -497,7 +498,12 @@ class TerrainModel(Model):
         )
 
         # Add the part
-        self.parts.append(part)
+        self.parts.append(self.part)
+
+    def update_mesh(self):
+        """Update the mesh data in the GPU buffer."""
+        # Update vertex buffer with new mesh data
+        self.part.vbo.write(self.mesh.vertices.tobytes())
 
 
 class Instance:

@@ -17,6 +17,7 @@ from riverborn.camera import Camera
 from riverborn.scene import Light, Material, Scene
 from riverborn.shader import load_shader
 from riverborn.shadow_debug import render_small_shadow_map
+from riverborn.terrain import recompute_normals
 
 from .ripples import WaterSimulation
 from .heightfield import create_noise_texture
@@ -134,8 +135,8 @@ class WaterApp(mglw.WindowConfig):
         terrain_model = self.scene.create_terrain(
             'terrain',
             segments=100,
-            width=100,
-            depth=100,
+            width=200,
+            depth=200,
             height=10,
             noise_scale=0.05,
             texture=terrain_texture,
@@ -237,6 +238,7 @@ class WaterApp(mglw.WindowConfig):
         self.canoe_vel += vec2(0, 0.5).rotated(-self.canoe_rot)
 
     def update(self, dt: float) -> None:
+        self.tool.update(dt)
         self.canoe_vel *= 0.6 ** dt
         self.canoe_pos += self.canoe_vel * dt
         self.canoe_angular_vel *= 0.3 ** dt
@@ -406,6 +408,9 @@ class NullTool:
     def __init__(self, app: WaterApp):
         pass
 
+    def update(self, dt: float):
+        pass
+
     def on_mouse_drag_event(self, x, y, dx, dy):
         pass
 
@@ -425,6 +430,9 @@ class WaterDisturbTool:
         self.app = app
         self.last_mouse = None
 
+    def update(self, dt: float):
+        pass
+
     def on_mouse_drag_event(self, x, y, dx, dy):
         # Convert mouse coordinates (window: origin top-left) to texture coordinates (origin bottom-left)
         cur_pos = self.app.screen_to_water(x, y)
@@ -443,6 +451,47 @@ class WaterDisturbTool:
     def on_mouse_press_event(self, x, y, button):
         # Record the initial mouse position in texture coordinates.
         self.last_mouse = self.app.screen_to_water(x, y)
+
+    def on_mouse_release_event(self, x, y, button):
+        self.last_mouse = None
+
+
+@register_tool
+class RaiseTool:
+    """Raise/Lower the terrain surface"""
+
+    def __init__(self, app: WaterApp):
+        self.app = app
+        self.last_mouse = None
+        self.speed = 0
+
+    def update(self, dt: float):
+        if self.last_mouse is None:
+            return
+
+        model = self.app.terrain_instance.model
+        heights = model.mesh.heights
+
+        w, h = heights.shape
+        x, y = self.last_mouse
+
+        # numpy distance from pos
+        coords_x, coords_y = np.indices((w, h))
+        dist = np.sqrt(
+            (coords_x - h * y) ** 2 + (coords_y - w * x) ** 2
+        )
+        heights += self.speed * 0.3 * np.exp(-dist / 2)
+        recompute_normals(model.mesh)
+        model.update_mesh()
+
+    def on_mouse_drag_event(self, x, y, dx, dy):
+        # Convert mouse coordinates (window: origin top-left) to texture coordinates (origin bottom-left)
+        self.last_mouse = self.app.screen_to_water(x, y)
+
+    def on_mouse_press_event(self, x, y, button):
+        # Record the initial mouse position in texture coordinates.
+        self.last_mouse = self.app.screen_to_water(x, y)
+        self.speed = 1 if button == self.app.wnd.mouse_states.left else -1
 
     def on_mouse_release_event(self, x, y, button):
         self.last_mouse = None
