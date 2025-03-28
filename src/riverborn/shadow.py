@@ -181,6 +181,10 @@ class ShadowSystem:
                 )
 
                 # Find the right vertex format based on model type
+                #
+                # We need to ignore the normal data because the shader doesn't
+                # use it for depth rendering, so the vertex format must contain
+                # "3x4" to ignore it
                 if isinstance(model, WavefrontModel):
                     vertex_format = '2f 3x4 3f'  # texcoord, normal, position
                     attrs = 'in_texcoord_0', 'in_position'
@@ -210,8 +214,9 @@ class ShadowSystem:
                 # Clean up the temporary VAO
                 vao.release()
 
-        # Restore viewport
+        # Restore viewport and FBO
         ctx.viewport = previous_viewport
+        self.ctx.screen.use()
 
     def setup_shadow_shader(self, camera: Camera, model: Model, **uniforms):
         """Set up the shadow shader for a specific model."""
@@ -266,7 +271,7 @@ class ShadowSystem:
             model.program = shader
 
             # Render the model with our shadow shader
-            model.draw(camera, -self.light.direction)
+            model._render(camera, -self.light.direction)
 
             # Restore the original program
             model.program = original_program

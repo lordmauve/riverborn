@@ -211,7 +211,7 @@ class Model:
         self.instance_matrices[index] = matrix
         self.instances_dirty = True
 
-    def draw(self, camera: Camera, light: Light) -> None:
+    def _render(self, camera: Camera, light: Light) -> None:
         """
         Render the model using instanced rendering.
 
@@ -222,18 +222,36 @@ class Model:
         self.flush_instances()
 
         for part in self.parts:
-            self.program.bind(
-                m_proj=camera.get_proj_matrix(),
-                m_view=camera.get_view_matrix(),
-                light_dir=-light.direction,
-                light_color=light.color,
-                ambient_color=light.ambient,
-                light_space_matrix=light.light_space_matrix,
-                **part['uniforms']
-            )
+            # Basic uniform values that all shaders need
+            uniforms = {
+                'm_proj': camera.get_proj_matrix(),
+                'm_view': camera.get_view_matrix(),
+                'light_dir': -light.direction,
+                'light_color': light.color,
+                'ambient_color': light.ambient,
+                'light_space_matrix': light.light_space_matrix,
+            }
+
+            # Add part-specific uniforms
+            uniforms.update(part['uniforms'])
+
+            # Check if the shader is expecting shadow-related uniforms by checking for "RECEIVE_SHADOWS" in defines
+            # This is a bit of a hack - ideally we'd check the actual uniforms required by the shader
+            if hasattr(self.program, 'label') and 'shadow' in self.program.label.lower():
+                # Add shadow-related uniforms with default/dummy values
+                uniforms.update({
+                    'camera_pos': camera.eye,
+                    'shadow_map': 0,  # Texture unit 0
+                    'use_pcf': False,
+                    'pcf_radius': 1.0,
+                    'shadow_bias': 0.01,
+                })
+
+            # Bind all uniforms
+            self.program.bind(**uniforms)
             part['vao'].render(instances=self.instance_count)
 
-    def draw_with_shadows(self, camera: Camera, light: Light, shadow_system) -> None:
+    def _render_with_shadows(self, camera: Camera, light: Light, shadow_system) -> None:
         # Set up shadow shader with common uniforms
         for part in self.parts:
             self.program.bind(
@@ -679,11 +697,11 @@ class Scene:
 
             # Render the scene with shadows
             for model in self.models.values():
-                model.draw_with_shadows(camera, light, self._shadow_system)
+                model._render_with_shadows(camera, light, self._shadow_system)
         else:
             # Regular drawing without shadows
             for model in self.models.values():
-                model.draw(camera, light)
+                model._render(camera, light)
 
     def destroy(self) -> None:
         """

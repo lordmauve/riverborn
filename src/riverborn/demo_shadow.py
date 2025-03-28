@@ -125,7 +125,7 @@ class ShadowMappingDemo(mglw.WindowConfig):
 
         # Display a small shadow map preview
         # Note: we need to access the shadow system through the scene's private attribute
-        if self.scene._shadow_system:
+        if self.light.shadows:
             render_small_shadow_map(
                 *self.wnd.buffer_size,
                 self.scene._shadow_system,
