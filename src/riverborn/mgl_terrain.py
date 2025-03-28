@@ -6,21 +6,19 @@ import random
 import sys
 import moderngl
 import moderngl_window as mglw
-from moderngl_window import scene
 import numpy as np
 import noise
 import imageio as iio
 from wasabigeom import vec2
 from pyglm import glm
 
-from riverborn import picking, terrain
-from riverborn.blending import blend_func
+from riverborn import picking
 from riverborn.camera import Camera
-from riverborn.scene import Model, Scene
+from riverborn.scene import Light, Material, Scene
 from riverborn.shader import load_shader
 
 from .ripples import WaterSimulation
-from .heightfield import Instance, create_noise_texture
+from .heightfield import create_noise_texture
 
 # Helper: create a simple quad geometry with positions (3f) and UV coordinates (2f)
 def create_quad(size):
@@ -96,32 +94,11 @@ class WaterApp(mglw.WindowConfig):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.ctx.gc_mode = "auto"
-        self.ctx.enable(moderngl.DEPTH_TEST | moderngl.BLEND)
-        self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
 
-        self.terrain = Instance(
-            terrain.make_terrain(100, 200, 200, 10, 0.03),
-            load_shader('diffuse'),
-            create_noise_texture(1024, color=(0.6, 0.5, 0.4))
-        )
+        self.ctx.enable(moderngl.DEPTH_TEST)
 
-        prog: moderngl.Program = load_shader('texture_alpha')
-
+        # Create the scene
         self.scene = Scene()
-        plant: Model = self.scene.load('fern.obj', prog, capacity=100)
-
-        for _ in range(200):
-            inst: Instance = self.scene.add(plant)
-            inst.pos = (random.uniform(-100, 100), 1, random.uniform(-100, 100))
-            inst.rotate(random.uniform(0, 2 * math.pi), glm.vec3(0, 1, 0))
-            inst.scale = glm.vec3(random.uniform(0.05, 0.12))
-            inst.update()
-
-        with importlib.resources.as_file(importlib.resources.files('riverborn') / 'models') as resource_dir:
-            self.canoe = self.load_scene(resource_dir / 'canoe.glb')
-        self.canoe.prepare()
-
-        self.canoe.matrix *= glm.scale(glm.vec3(10, 10, 10))
 
         # Create the camera.
         self.camera = Camera(
@@ -133,6 +110,76 @@ class WaterApp(mglw.WindowConfig):
             near=0.1,
             far=1000.0,
         )
+
+        # Create a directional light with shadows enabled
+        self.light = Light(
+            direction=[0.5, -0.8, -0.3],
+            color=[1.0, 0.9, 0.8],
+            ambient=[0.0, 0.1, 0.0],
+            ortho_size=50.0,
+            shadows=True  # Enable shadows (default is True)
+        )
+
+        # Generate terrain texture
+        terrain_texture = create_noise_texture(size=512, color=(0.6, 0.5, 0.4))
+
+        # Create a terrain model and add it to the scene
+        # Define terrain material properties
+        terrain_material = Material(
+            receive_shadows=True,  # This terrain receives shadows
+            cast_shadows=True      # This terrain casts shadows
+        )
+
+        terrain_model = self.scene.create_terrain(
+            'terrain',
+            segments=100,
+            width=40,
+            depth=40,
+            height=5,
+            noise_scale=0.1,
+            texture=terrain_texture,
+            material=terrain_material
+        )
+
+        # Create an instance of the terrain model
+        self.terrain_instance = self.scene.add(terrain_model)
+
+        # Define plant material properties
+        # Plants are double-sided and have some translucency
+        plant_material = Material(
+            double_sided=True,
+            translucent=True,
+            transmissivity=0.3,
+            receive_shadows=True,  # Plants receive shadows
+            cast_shadows=True,     # Plants cast shadows
+            alpha_test=True
+        )
+
+        # Load a fern model with appropriate material properties
+        self.plant_model = self.scene.load_wavefront('fern.obj', material=plant_material, capacity=50)
+
+        # Create plant instances
+        for _ in range(20):
+            inst = self.scene.add(self.plant_model)
+            # Random position on the terrain
+            inst.pos = glm.vec3(random.uniform(-20, 20), 0, random.uniform(-20, 20))
+            inst.rotate(random.uniform(0, 2 * math.pi), glm.vec3(0, 1, 0))
+            inst.scale = glm.vec3(random.uniform(0.05, 0.1))
+            inst.update()
+
+        canoe_material = Material(
+            double_sided=False,
+            translucent=False,
+            transmissivity=0.0,
+            receive_shadows=True,
+            cast_shadows=True,
+            alpha_test=False,
+        )
+
+        canoe_model = self.scene.load_wavefront('boat.obj', material=canoe_material, capacity=1)
+        self.canoe = self.scene.add(canoe_model)
+        self.canoe.pos = glm.vec3(0, 0, 0)
+
 
         self.offscreen_depth = self.ctx.depth_texture(self.wnd.size)
         self.offscreen_fbo = self.ctx.framebuffer(
@@ -195,14 +242,11 @@ class WaterApp(mglw.WindowConfig):
         self.canoe_rot += self.canoe_angular_vel * dt
 
         prev_pos = self.canoe_pos3
-        self.canoe_pos3 = glm.vec3(self.canoe_pos.x, 1, self.canoe_pos.y)
-        m = self.canoe.matrix = glm.scale(
-            glm.rotate(
-                glm.translate(self.canoe_pos3),
-                self.canoe_rot,
-                glm.vec3(0, 1, 0),
-            ), glm.vec3(self.CANOE_SIZE)
+        self.canoe.pos = glm.vec3(self.canoe_pos.x, 1, self.canoe_pos.y)
+        self.canoe.rot = glm.quat(
+            glm.angleAxis(self.canoe_rot, glm.vec3(0, 1, 0))
         )
+        m = self.canoe.matrix
 
         back = m * glm.vec3(0, 0, 0.4)
         front = m * glm.vec3(0, 0, -0.4)
@@ -223,7 +267,10 @@ class WaterApp(mglw.WindowConfig):
         # ------------------------------
         self.offscreen_fbo.use()
         self.ctx.clear(0.0, 0.0, 0.0, 1.0)
-        self.terrain.render(self.camera)
+
+        view = self.camera.get_view_matrix()
+        proj = self.camera.get_proj_matrix()
+        self.scene.render_depth(proj * view)
 
         # ------------------------------
         # Second pass: Render water plane to the default framebuffer.
@@ -231,11 +278,9 @@ class WaterApp(mglw.WindowConfig):
 
         self.ctx.screen.use()
         self.ctx.clear(0.2, 0.3, 0.4, 1.0)
-        self.terrain.render(self.camera)
 
         with self.ctx.scope(enable_only=moderngl.CULL_FACE | moderngl.DEPTH_TEST):
-            self.scene.draw(self.camera, SUN_DIR)
-            self.canoe.draw(self.camera.get_proj_matrix(), self.camera.get_view_matrix())
+            self.scene.draw(self.camera, self.light)
 
         self.water_prog["env_cube"].value = 1
         self.water_prog["depth_tex"].value = 2

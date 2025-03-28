@@ -2,11 +2,14 @@
 #include "shadow_common.glsl"
 
 in vec3 frag_normal;
-in vec2 frag_uv;
 in vec3 frag_pos;
 in vec4 frag_pos_light_space;
 
+#ifdef TEXTURE
+in vec2 frag_uv;
 uniform sampler2D diffuse_tex;
+#endif
+
 uniform vec3 light_dir;
 uniform vec3 light_color;
 uniform vec3 ambient_color;
@@ -20,11 +23,15 @@ uniform bool use_pcf = true;
 out vec4 fragColor;
 
 void main() {
+#ifdef TEXTURE
     // Sample texture
     vec4 tex_color = texture(diffuse_tex, frag_uv);
     if (tex_color.a < 0.3) {
         discard;
     }
+#else
+    vec4 tex_color = vec4(1.0);
+#endif
 
     // Get the normal and check if we're viewing the back face
     vec3 normal = normalize(frag_normal);

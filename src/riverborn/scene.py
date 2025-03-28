@@ -16,6 +16,7 @@ The system supports:
 """
 
 from contextlib import suppress
+from functools import cache
 import importlib.resources
 from pathlib import Path
 import typing
@@ -226,7 +227,7 @@ class Model:
         self.instance_matrices[index] = matrix
         self.instances_dirty = True
 
-    def _get_appropriate_shader(self, light: Light | None) -> BindableProgram:
+    def _get_appropriate_shader(self, light: Light | None, part) -> BindableProgram:
         """Get the appropriate shader based on light and material properties.
 
         Args:
@@ -249,14 +250,33 @@ class Model:
         defines = {
             'INSTANCED': '1',  # Always use instancing for models
         }
-        if self.material.alpha_test:
+        if self.material.alpha_test and 'diffuse_tex' in part['uniforms']:
             defines['ALPHA_TEST'] = '1'
+            defines['TEXTURE'] = '1'
 
         # Add material defines if using a shadow shader
         if shader_type == 'shadow':
             defines.update(self.material.to_defines())
 
         return load_shader(shader_type, **defines)
+
+    def _get_depth_shader(self, part) -> BindableProgram:
+        """Get an appropriate depth shader based on material properties.
+
+        Args:
+            instanced: Whether to use instancing
+            material: Material properties to pass to the shader
+
+        Returns:
+            Shader program for depth rendering
+        """
+        # Create shader defines based on material properties
+        defines = {
+            'INSTANCED': '1',  # Always use instancing for models
+        }
+        if self.material.alpha_test and 'diffuse_tex' in part['uniforms']:
+            defines['ALPHA_TEST'] = '1'
+        return load_shader('depth', **defines)
 
     def draw(self, camera: Camera, light: Light) -> None:
         """
@@ -269,23 +289,17 @@ class Model:
         self.flush_instances()
 
         # Get the appropriate shader based on current state
-        shader = self._get_appropriate_shader(light)
-        shader_name = getattr(shader, 'label', '').lower()
 
         for part in self.parts:
+            shader = self._get_appropriate_shader(light, part)
+            shader_name = getattr(shader, 'label', '').lower()
+
             # Create uniform dict based on shader and rendering state
             uniforms = {
                 'm_proj': camera.get_proj_matrix(),
                 'm_view': camera.get_view_matrix(),
+                **part['uniforms']
             }
-
-            # Add part-specific uniforms (textures, etc.)
-            if 'diffuse_tex' in part['uniforms'] and 'diffuse_tex' in shader:
-                # Copy texture to the uniform name expected by the shader
-                if 'texture_alpha' in shader_name:
-                    uniforms['texture0'] = part['uniforms']['diffuse_tex']
-                else:
-                    uniforms['diffuse_tex'] = part['uniforms']['diffuse_tex']
 
             # Add lighting uniforms depending on shader
             if 'light_dir' in shader:
@@ -379,44 +393,50 @@ class WavefrontModel(Model):
             for material in mesh_obj.materials:
                 if not material:
                     continue
-                assert material.vertex_format == 'T2F_N3F_V3F', \
-                    f"Unsupported vertex format: {material.vertex_format}"
+                match material.vertex_format:
+                    case 'T2F_N3F_V3F':
+                        vbotype = '2f 3f 3f', 'in_texcoord_0', 'in_normal', 'in_position'
+                    case 'T2F_V3F':
+                        vbotype = '2f 3f', 'in_texcoord_0', 'in_position'
+                    case 'N3F_V3F':
+                        vbotype = '3f 3f', 'in_normal', 'in_position'
+                    case _:
+                        raise ValueError(f"Unsupported vertex format: {material.vertex_format}")
+
                 vertices = np.array(material.vertices, dtype='f4')
                 vbo = ctx.buffer(vertices.tobytes())
-                if hasattr(material, 'texture'):
-                    path = Path(material.texture.path).name
-                    uniforms = {
-                        'diffuse_tex': self.load_texture(path)
+
+                partconfig = {
+                    'vbo': vbo,
+                    'vbotype': vbotype,
+                }
+
+                if material.texture:
+                    partconfig['uniforms'] = {
+                        'diffuse_tex': self.load_texture(Path(material.texture.path).name)
                     }
                 else:
-                    uniforms = {}
+                    partconfig['uniforms'] = {}
 
-                if hasattr(material, 'faces') and material.faces:
+
+                indexed = partconfig['indexed'] = hasattr(material, 'faces') and material.faces
+                if indexed:
                     indices = np.array([i for face in material.faces for i in face], dtype='i4')
                     ibo = ctx.buffer(indices.tobytes())
-                    vao = ctx.vertex_array(self._get_appropriate_shader(light=None), [
-                        (vbo, '2f 3f 3f', 'in_texcoord_0', 'in_normal', 'in_position'),
+                    partconfig['ibo'] = ibo
+
+                    vao = ctx.vertex_array(self._get_appropriate_shader(None, partconfig), [
+                        (vbo, *vbotype),
                         (self.instance_buffer, '16f4/i', 'm_model')
                     ], ibo)
-                    self.parts.append({
-                        "vbo": vbo, "ibo": ibo, "vao": vao, "indexed": True,
-                        'uniforms': uniforms,
-                        'vao_args': [(vbo, '2f 3f 3f', 'in_texcoord_0', 'in_normal', 'in_position'),
-                                     (self.instance_buffer, '16f4/i', 'm_model')]
-                    })
                 else:
-                    vao = ctx.vertex_array(self._get_appropriate_shader(light=None), [
-                        (vbo, '2f 3f 3f', 'in_texcoord_0', 'in_normal', 'in_position'),
+                    vao = ctx.vertex_array(self._get_appropriate_shader(None, partconfig), [
+                        (vbo, *vbotype),
                         (self.instance_buffer, '16f4/i', 'm_model')
                     ])
-                    self.parts.append({
-                        "vbo": vbo,
-                        "vao": vao,
-                        "indexed": False,
-                        'uniforms': uniforms,
-                        'vao_args': [(vbo, '2f 3f 3f', 'in_texcoord_0', 'in_normal', 'in_position'),
-                                     (self.instance_buffer, '16f4/i', 'm_model')]
-                    })
+                partconfig['vao'] = vao
+
+                self.parts.append(partconfig)
 
 
 class TerrainModel(Model):
@@ -452,22 +472,25 @@ class TerrainModel(Model):
         elif isinstance(texture, np.ndarray):
             uniforms = {'diffuse_tex': self.create_texture_from_array(texture)}
 
+        vbotype = ('3f 3f 2f', 'in_position', 'in_normal', 'in_texcoord_0')
+        part = {
+            "vbo": vbo,
+            "ibo": ibo,
+            "indexed": True,
+            "vbotype": vbotype,
+            "uniforms": uniforms,
+            'vao_args': [(vbo, *vbotype),
+                         (self.instance_buffer, '16f4/i', 'm_model')]
+        }
+
         # Create the VAO
-        vao = ctx.vertex_array(self._get_appropriate_shader(light=None), [
-            (vbo, '3f 3f 2f', 'in_position', 'in_normal', 'in_texcoord_0'),
+        part['vao'] = ctx.vertex_array(self._get_appropriate_shader(None, part), [
+            (vbo, *vbotype),
             (self.instance_buffer, '16f4/i', 'm_model')
         ], ibo)
 
         # Add the part
-        self.parts.append({
-            "vbo": vbo,
-            "ibo": ibo,
-            "vao": vao,
-            "indexed": True,
-            "uniforms": uniforms,
-            'vao_args': [(vbo, '3f 3f 2f', 'in_position', 'in_normal', 'in_texcoord_0'),
-                         (self.instance_buffer, '16f4/i', 'm_model')]
-        })
+        self.parts.append(part)
 
 
 class Instance:
@@ -769,6 +792,69 @@ class Scene:
         for model in self.models.values():
             model.draw(camera, light)
 
+    def render_depth(self, viewproj: glm.mat4) -> None:
+        """Render the scene to the shadow map from the light's perspective.
+
+        Args:
+            scene: The scene to render
+        """
+        self.ctx.enable(moderngl.DEPTH_TEST)
+
+        # Render each model in the scene
+        for model_name, model in self.models.items():
+            # Skip models that don't cast shadows
+            material = model.material
+
+            # Skip rendering this model if it doesn't cast shadows
+            if material and not material.cast_shadows:
+                continue
+
+            # If instances_dirty is set, update the instance buffer
+            model.flush_instances()
+
+            # Render each part of the model
+            for part in model.parts:
+                # Get the depth shader based on the model's properties
+
+                # Get appropriate depth shader
+                depth_shader = model._get_depth_shader()
+
+                # Update light space matrix uniform for the depth shader
+                try:
+                    depth_shader.bind(
+                        light_space_matrix=viewproj,
+                        **part['uniforms']
+                    )
+                except ValueError as e:
+                    raise Exception(
+                        f"Failed to bind {part}"
+                    ) from e
+
+                # Find the right vertex format based on vbo type
+                #
+                # We need to ignore the normal data because the shader doesn't
+                # use it for depth rendering, so the vertex format must contain
+                # "3x4" to ignore it
+                vertex_format, *attrs = subformat(part['vbotype'], texcoord=material.alpha_test)
+
+                # Extract just the position component for depth pass
+                vao_args = [
+                    (part['vbo'], vertex_format, *attrs),
+                    (model.instance_buffer, '16f4/i', 'm_model')
+                ]
+
+                # Create the VAO (with or without indices)
+                if 'ibo' in part:
+                    vao = self.ctx.vertex_array(depth_shader, vao_args, part['ibo'])
+                else:
+                    vao = self.ctx.vertex_array(depth_shader, vao_args)
+
+                # Render this part with instancing
+                vao.render(instances=model.instance_count)
+
+                # Clean up the temporary VAO
+                vao.release()
+
     def destroy(self) -> None:
         """
         Clean up all models and instances in the scene.
@@ -777,6 +863,44 @@ class Scene:
             model.destroy()
         self.models.clear()
         self.instances.clear()
+
+
+# FIXME: not a very complete mapping
+SUPPRESS = {
+    '2f4': '2x4',
+    '2f': '2x4',
+    '3f': '3x4',
+    '3f4': '3x4',
+}
+
+
+@cache
+def subformat(vbotype: tuple[str, ...], *, texcoord: bool = False, normal: bool = False) -> tuple[str, ...]:
+    """Create a subformat string for vertex attributes.
+
+    >>> subformat('2f 3f 3f', texcoord=True, normal=False)
+    ('2f 3f 3x4', 'in_texcoord_0', 'in_position')
+    """
+    format, *attrs = vbotype
+    types = format.split(' ')
+    newtype = []
+    newattrs = []
+    for t, a in zip(types, attrs):
+        match a:
+            case 'in_texcoord_0':
+                if texcoord:
+                    newattrs.append(a)
+                else:
+                    t = SUPPRESS[t]
+            case 'in_normal':
+                if normal:
+                    newattrs.append(a)
+                else:
+                    t = SUPPRESS[t]
+            case _:
+                newattrs.append(a)
+        newtype.append(t)
+    return (' '.join(newtype), *newattrs)
 
 
 # Create a noise texture for terrain

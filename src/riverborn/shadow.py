@@ -36,32 +36,6 @@ class ShadowMap:
         # Create a framebuffer with the depth texture
         self.fbo = self.ctx.framebuffer(depth_attachment=self.depth_texture)
 
-        # Create default depth materials
-        self.depth_material = Material(alpha_test=True)
-
-    def get_depth_shader(self, instanced=True, material=None) -> BindableProgram:
-        """Get an appropriate depth shader based on material properties.
-
-        Args:
-            instanced: Whether to use instancing
-            material: Material properties to pass to the shader
-
-        Returns:
-            Shader program for depth rendering
-        """
-        # Use default material if none is provided
-        mat = material or self.depth_material
-
-        # Create shader defines based on material properties
-        defines = {
-            'ALPHA_TEST': '1' if mat.alpha_test else '0'
-        }
-
-        if instanced:
-            defines['INSTANCED'] = '1'
-
-        return load_shader('depth', **defines)
-
 
 class ShadowSystem:
     """System for rendering shadows using shadow mapping.
@@ -122,68 +96,7 @@ class ShadowSystem:
         # Set viewport to shadow map size
         previous_viewport = ctx.viewport
         ctx.viewport = (0, 0, self.shadow_map.width, self.shadow_map.height)
-
-        # Render each model in the scene
-        for model_name, model in scene.models.items():
-            # Skip models that don't cast shadows
-            material = model.material
-
-            # Skip rendering this model if it doesn't cast shadows
-            if material and not material.cast_shadows:
-                continue
-
-            # If instances_dirty is set, update the instance buffer
-            model.flush_instances()
-
-            # Render each part of the model
-            for part in model.parts:
-                # Get the depth shader based on the model's properties
-
-                # Get appropriate depth shader
-                depth_shader = self.shadow_map.get_depth_shader(instanced=True, material=material)
-
-                # Update light space matrix uniform for the depth shader
-                depth_shader.bind(
-                    light_space_matrix=self.light.light_space_matrix,
-                    **part['uniforms']
-                )
-
-                # Find the right vertex format based on model type
-                #
-                # We need to ignore the normal data because the shader doesn't
-                # use it for depth rendering, so the vertex format must contain
-                # "3x4" to ignore it
-                attrs: tuple[str, ...]
-                if isinstance(model, WavefrontModel):
-                    vertex_format = '2f 3x4 3f'  # texcoord, normal, position
-                    attrs = 'in_texcoord_0', 'in_position'
-                elif isinstance(model, TerrainModel):
-                    vertex_format = '3f 3x4 2f'  # position, normal, texcoord
-                    attrs = 'in_position', 'in_texcoord_0'
-                else:
-                    # Default case - attempt to use just position component
-                    vertex_format = '3f'  # position only
-                    attrs = 'in_position',
-
-                # Extract just the position component for depth pass
-                vao_args = [
-                    (part['vbo'], vertex_format, *attrs),
-                    (model.instance_buffer, '16f4/i', 'm_model')
-                ]
-
-                # Create the VAO (with or without indices)
-                if 'ibo' in part:
-                    vao = ctx.vertex_array(depth_shader, vao_args, part['ibo'])
-                else:
-                    vao = ctx.vertex_array(depth_shader, vao_args)
-
-                # Render this part with instancing
-                vao.render(instances=model.instance_count)
-
-                # Clean up the temporary VAO
-                vao.release()
-
-        # Restore viewport and FBO
+        scene.render_depth(self.light.light_space_matrix)
         ctx.viewport = previous_viewport
         ctx.screen.use()
 
