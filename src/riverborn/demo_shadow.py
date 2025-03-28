@@ -50,7 +50,7 @@ class ShadowMappingDemo(mglw.WindowConfig):
         self.light = Light(
             direction=[0.5, -0.8, -0.3],
             color=[1.0, 0.9, 0.8],
-            ambient=[0.2, 0.2, 0.2],
+            ambient=[0.0, 0.1, 0.0],
             ortho_size=50.0
         )
 
