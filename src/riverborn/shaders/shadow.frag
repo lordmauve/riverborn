@@ -11,6 +11,7 @@ uniform vec3 light_dir;
 uniform vec3 light_color;
 uniform vec3 ambient_color;
 uniform vec3 camera_pos;
+const vec3 transmissivity = vec3(0.2, 0.2, 0.2);  // How much light passes through the surface
 
 uniform float shadow_bias = 0.005;
 uniform float pcf_radius = 1.0;
@@ -25,14 +26,15 @@ void main() {
         discard;
     }
 
-    // Get the normal and adjust it if we're viewing the back face
+    // Get the normal and check if we're viewing the back face
     vec3 normal = normalize(frag_normal);
     vec3 view_dir = normalize(camera_pos - frag_pos);
 
-    // Check if we're viewing the back face by comparing the view direction with the normal
-    // If the dot product is negative, we're looking at the back face
-    if (dot(view_dir, normal) < 0.0) {
-        // Flip the normal for back faces
+    // Check if we're viewing the back face
+    bool is_back_face = dot(view_dir, normal) < 0.0;
+
+    // Flip the normal for back faces
+    if (is_back_face) {
         normal = -normal;
     }
 
@@ -44,6 +46,15 @@ void main() {
     // Diffuse
     float diff = max(dot(normal, light), 0.0);
     vec3 diffuse = diff * light_color;
+
+    // For back faces, add transmitted light based on transmissivity
+    // This simulates light passing through the surface from the front
+    if (is_back_face) {
+        // Calculate light hitting the front face (opposite normal)
+        float front_diff = max(dot(-normal, light), 0.0);
+        // Add transmitted light based on transmissivity parameter
+        diffuse += front_diff * light_color * transmissivity;
+    }
 
     // Specular (optional)
     vec3 reflect_dir = reflect(-light, normal);
