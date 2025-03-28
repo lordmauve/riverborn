@@ -16,6 +16,7 @@ from riverborn import picking
 from riverborn.camera import Camera
 from riverborn.scene import Light, Material, Scene
 from riverborn.shader import load_shader
+from riverborn.shadow_debug import render_small_shadow_map
 
 from .ripples import WaterSimulation
 from .heightfield import create_noise_texture
@@ -94,8 +95,8 @@ class WaterApp(mglw.WindowConfig):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.ctx.gc_mode = "auto"
-
         self.ctx.enable(moderngl.DEPTH_TEST)
+        self.tool = TOOLS[self.tool_id](self)
 
         # Create the scene
         self.scene = Scene()
@@ -113,7 +114,7 @@ class WaterApp(mglw.WindowConfig):
 
         # Create a directional light with shadows enabled
         self.light = Light(
-            direction=[0.5, -0.8, -0.3],
+            direction=[0.5, -0.3, 0.3],
             color=[1.0, 0.9, 0.8],
             ambient=[0.0, 0.1, 0.0],
             ortho_size=50.0,
@@ -133,10 +134,10 @@ class WaterApp(mglw.WindowConfig):
         terrain_model = self.scene.create_terrain(
             'terrain',
             segments=100,
-            width=40,
-            depth=40,
-            height=5,
-            noise_scale=0.1,
+            width=100,
+            depth=100,
+            height=10,
+            noise_scale=0.05,
             texture=terrain_texture,
             material=terrain_material
         )
@@ -279,8 +280,7 @@ class WaterApp(mglw.WindowConfig):
         self.ctx.screen.use()
         self.ctx.clear(0.2, 0.3, 0.4, 1.0)
 
-        with self.ctx.scope(enable_only=moderngl.CULL_FACE | moderngl.DEPTH_TEST):
-            self.scene.draw(self.camera, self.light)
+        self.scene.draw(self.camera, self.light)
 
         self.water_prog["env_cube"].value = 1
         self.water_prog["depth_tex"].value = 2
@@ -295,7 +295,7 @@ class WaterApp(mglw.WindowConfig):
 
         self.water_sim.texture.use(location=0)
         self.water_prog["height_map"].value = 0
-        self.water_prog['base_water'] = (0.3, 0.25, 0.2)
+        self.water_prog['base_water'] = (0.2, 0.15, 0.1)
         self.water_prog['water_opaque_depth'] = 3
 
 
@@ -307,6 +307,14 @@ class WaterApp(mglw.WindowConfig):
         if self.recorder is not None:
             self.recorder._vid_frame()
 
+        # Display a small shadow map preview
+        # if self.light.shadows and self.light.shadow_system:
+        #     render_small_shadow_map(
+        #         *self.wnd.buffer_size,
+        #         self.light.shadow_system,
+        #         self.light
+        #     )
+
     def on_resize(self, width: int, height: int):
         # When the window is resized, update the offscreen framebuffer and resolution uniform.
         self.offscreen_depth = self.ctx.depth_texture((width, height))
@@ -317,8 +325,6 @@ class WaterApp(mglw.WindowConfig):
                 # Create the camera.
         self.camera.set_aspect(width / height)
         self.ctx.gc()
-
-    last_mouse: tuple[float, float] | None = None
 
     def screen_to_ground(self, x, y) -> glm.vec3 | None:
         width, height = self.wnd.size
@@ -339,28 +345,23 @@ class WaterApp(mglw.WindowConfig):
         return intersection and self.pos_to_water(intersection)
 
     def on_mouse_drag_event(self, x, y, dx, dy):
-        # Convert mouse coordinates (window: origin top-left) to texture coordinates (origin bottom-left)
-        cur_pos = self.screen_to_water(x, y)
-
-        if cur_pos is None:
-            self.last_mouse = None
-            return
-
-        if self.last_mouse is None:
-            self.last_mouse = cur_pos
-
-        # Apply a disturbance by drawing between the last and current mouse positions.
-        self.water_sim.disturb(self.last_mouse, cur_pos)
-        self.last_mouse = cur_pos
+        self.tool.on_mouse_drag_event(x, y, dx, dy)
 
     def on_mouse_press_event(self, x, y, button):
-        # Record the initial mouse position in texture coordinates.
-        self.last_mouse = self.screen_to_water(x, y)
+        self.tool.on_mouse_press_event(x, y, button)
 
     def on_mouse_release_event(self, x, y, button):
-        self.last_mouse = None
+        self.tool.on_mouse_release_event(x, y, button)
 
     recorder = None
+
+    tool_id = 0
+
+    def mount_tool(self):
+        """Mount the tool to the application."""
+        cls = TOOLS[self.tool_id]
+        print(cls.__doc__ or cls.__name__)
+        self.tool = cls(self)
 
     def on_key_event(self, key, action, modifiers):
 
@@ -369,6 +370,10 @@ class WaterApp(mglw.WindowConfig):
         match op, key, modifiers.shift:
             case ('press', keys.ESCAPE, _):
                 sys.exit()
+
+            case ('press', keys.TAB, shift):
+                self.tool_id = (self.tool_id + (-1 if shift else 1)) % len(TOOLS)
+                self.mount_tool()
 
             case ('press', keys.F12, False):
                 from .screenshot import screenshot
@@ -385,6 +390,64 @@ class WaterApp(mglw.WindowConfig):
 
             case 'press', keys.RIGHT, _:
                 self.paddle(1)
+
+
+TOOLS = []
+
+def register_tool(tool_class):
+    """Register a tool class for use in the application."""
+    TOOLS.append(tool_class)
+    return tool_class
+
+
+@register_tool
+class NullTool:
+    """A tool that does nothing."""
+    def __init__(self, app: WaterApp):
+        pass
+
+    def on_mouse_drag_event(self, x, y, dx, dy):
+        pass
+
+    def on_mouse_press_event(self, x, y, button):
+        pass
+
+    def on_mouse_release_event(self, x, y, button):
+        pass
+
+
+@register_tool
+class WaterDisturbTool:
+    """Disturb the water surface with mouse input."""
+    last_mouse: tuple[float, float] | None = None
+
+    def __init__(self, app: WaterApp):
+        self.app = app
+        self.last_mouse = None
+
+    def on_mouse_drag_event(self, x, y, dx, dy):
+        # Convert mouse coordinates (window: origin top-left) to texture coordinates (origin bottom-left)
+        cur_pos = self.app.screen_to_water(x, y)
+
+        if cur_pos is None:
+            self.last_mouse = None
+            return
+
+        if self.last_mouse is None:
+            self.last_mouse = cur_pos
+
+        # Apply a disturbance by drawing between the last and current mouse positions.
+        self.app.water_sim.disturb(self.last_mouse, cur_pos)
+        self.last_mouse = cur_pos
+
+    def on_mouse_press_event(self, x, y, button):
+        # Record the initial mouse position in texture coordinates.
+        self.last_mouse = self.app.screen_to_water(x, y)
+
+    def on_mouse_release_event(self, x, y, button):
+        self.last_mouse = None
+
+
 
 def main():
     mglw.run_window_config(WaterApp)
