@@ -1,5 +1,5 @@
 """
-Shadow Mapping Demo - Shows integration with Scene framework with debug visualization
+Shadow Mapping Demo - Shows automatic shadow rendering with Scene framework
 """
 import os
 import sys
@@ -10,8 +10,7 @@ import moderngl_window as mglw
 from pyglm import glm
 
 from riverborn.camera import Camera
-from riverborn.scene import Scene, Material
-from riverborn.shadow import ShadowSystem, Light
+from riverborn.scene import Scene, Material, Light
 from riverborn.heightfield import create_noise_texture
 from riverborn.shadow_debug import render_small_shadow_map
 
@@ -42,25 +41,23 @@ class ShadowMappingDemo(mglw.WindowConfig):
             far=1000.0,
         )
 
-        # Create a directional light
+        # Create a directional light with shadows enabled
         self.light = Light(
             direction=[0.5, -0.8, -0.3],
             color=[1.0, 0.9, 0.8],
             ambient=[0.0, 0.1, 0.0],
-            ortho_size=50.0
+            ortho_size=50.0,
+            shadows=True  # Enable shadows (default is True)
         )
-
-        # Create the shadow system
-        self.shadow_system = ShadowSystem(shadow_map_size=1024)
-        self.shadow_system.set_light(self.light)
 
         # Generate terrain texture
         terrain_texture = create_noise_texture(size=512, color=(0.6, 0.5, 0.4))
 
         # Create a terrain model and add it to the scene
-        # Define terrain material properties using the new Material dataclass
+        # Define terrain material properties
         terrain_material = Material(
-            receive_shadows=True
+            receive_shadows=True,  # This terrain receives shadows
+            cast_shadows=True      # This terrain casts shadows
         )
 
         terrain_model = self.scene.create_terrain(
@@ -77,13 +74,14 @@ class ShadowMappingDemo(mglw.WindowConfig):
         # Create an instance of the terrain model
         self.terrain_instance = self.scene.add(terrain_model)
 
-        # Define plant material properties using the new Material dataclass
+        # Define plant material properties
         # Plants are double-sided and have some translucency
         plant_material = Material(
             double_sided=True,
             translucent=True,
             transmissivity=0.3,
-            receive_shadows=True,
+            receive_shadows=True,  # Plants receive shadows
+            cast_shadows=True,     # Plants cast shadows
             alpha_test=True
         )
 
@@ -98,9 +96,6 @@ class ShadowMappingDemo(mglw.WindowConfig):
             inst.rotate(random.uniform(0, 2 * math.pi), glm.vec3(0, 1, 0))
             inst.scale = glm.vec3(random.uniform(0.05, 0.1))
             inst.update()
-
-        # Debug mode flag
-        self.debug_mode = False
 
         # Time tracking
         self.time = 0
@@ -123,21 +118,19 @@ class ShadowMappingDemo(mglw.WindowConfig):
             ))
             self.light.update_matrices()
 
-        # First pass: render scene to shadow map from light's perspective
-        self.shadow_system.render_depth(self.scene)
-
-        # Second pass: render scene with shadows
+        # Render the scene with shadows (handled automatically by the scene)
         ctx = mglw.ctx()
         ctx.screen.use()
+        self.scene.draw(self.camera, self.light)
 
-        # Render scene objects
-        self.scene.draw_with_shadows(self.camera, self.light, self.shadow_system)
-
-        render_small_shadow_map(
-            *self.wnd.buffer_size,
-            self.shadow_system,
-            self.light
-        )
+        # Display a small shadow map preview
+        # Note: we need to access the shadow system through the scene's private attribute
+        if self.scene._shadow_system:
+            render_small_shadow_map(
+                *self.wnd.buffer_size,
+                self.scene._shadow_system,
+                self.light
+            )
 
     def on_key_event(self, key, action, modifiers):
         if action == self.wnd.keys.ACTION_PRESS:
@@ -146,9 +139,10 @@ class ShadowMappingDemo(mglw.WindowConfig):
             elif key == self.wnd.keys.SPACE:
                 self.rotate_light = not self.rotate_light
                 print(f"Light rotation: {'on' if self.rotate_light else 'off'}")
-            elif key == self.wnd.keys.D:
-                self.debug_mode = not self.debug_mode
-                print(f"Debug mode: {'on' if self.debug_mode else 'off'}")
+            elif key == self.wnd.keys.S:
+                # Toggle shadows on/off
+                self.light.shadows = not self.light.shadows
+                print(f"Shadows: {'on' if self.light.shadows else 'off'}")
             elif key == self.wnd.keys.F12:
                 from riverborn.screenshot import screenshot
                 screenshot()

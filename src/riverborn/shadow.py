@@ -148,6 +148,18 @@ class ShadowSystem:
 
         # Render each model in the scene
         for model_name, model in scene.models.items():
+            # Skip models that don't cast shadows
+            # Extract material information from the model if possible
+            material = None
+            if hasattr(model, 'material'):
+                material = model.material
+            elif hasattr(model.program, 'material'):
+                material = model.program.material
+
+            # Skip rendering this model if it doesn't cast shadows
+            if material and not material.cast_shadows:
+                continue
+
             # If instances_dirty is set, update the instance buffer
             model.flush_instances()
 

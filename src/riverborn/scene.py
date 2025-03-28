@@ -49,6 +49,7 @@ class Light:
         view_matrix: Light's view matrix
         proj_matrix: Light's projection matrix
         light_space_matrix: Combined projection and view matrix
+        shadows: Whether this light casts shadows
     """
     def __init__(self,
                  direction: glm.vec3,
@@ -58,7 +59,8 @@ class Light:
                  ortho_size: float = 50.0,
                  near: float = 1.0,
                  far: float = 200.0,
-                 target: glm.vec3 = glm.vec3(0.0)):
+                 target: glm.vec3 = glm.vec3(0.0),
+                 shadows: bool = True):
         """Initialize the light.
 
         Args:
@@ -70,6 +72,7 @@ class Light:
             near: Near plane distance
             far: Far plane distance
             target: Target point the light looks at (center of the shadow projection)
+            shadows: Whether this light casts shadows
         """
         self.direction = glm.normalize(glm.vec3(direction))
         self.color = glm.vec3(color)
@@ -79,6 +82,7 @@ class Light:
         self.near = near
         self.far = far
         self.target = glm.vec3(target)
+        self.shadows = shadows
 
         self.update_matrices()
 
@@ -510,6 +514,7 @@ class Material:
     translucent: bool = False
     transmissivity: float = 0.0
     receive_shadows: bool = True
+    cast_shadows: bool = True
     alpha_test: bool = False
 
     def to_defines(self) -> Dict[str, str]:
@@ -551,6 +556,8 @@ class Scene:
         self.instances: List[Instance] = []
         # Default material properties
         self.default_material = Material()
+        # Shadow system (created on demand)
+        self._shadow_system = None
 
     def _get_shader_for_model(self, base_shader: str, material: Material = None, **extra_defines) -> moderngl.Program:
         """
@@ -657,20 +664,26 @@ class Scene:
             camera: Camera object with view and projection matrices
             light: Light object for lighting calculations
         """
-        for model in self.models.values():
-            model.draw(camera, light)
+        # Check if we need to use shadows
+        if light.shadows:
+            # Create shadow system on demand if needed
+            if self._shadow_system is None:
+                from riverborn.shadow import ShadowSystem
+                self._shadow_system = ShadowSystem(shadow_map_size=2048)
 
-    def draw_with_shadows(self, camera: Camera, light: Light, shadows) -> None:
-        """
-        Draw all models with their instances in the scene.
+            # Set the light in the shadow system
+            self._shadow_system.set_light(light)
 
-        Args:
-            camera: Camera object with view and projection matrices
-            light: Light object for lighting calculations
-            shadows: Shadow system for rendering shadows
-        """
-        for model in self.models.values():
-            model.draw_with_shadows(camera, light, shadows)
+            # Render depth pass
+            self._shadow_system.render_depth(self)
+
+            # Render the scene with shadows
+            for model in self.models.values():
+                model.draw_with_shadows(camera, light, self._shadow_system)
+        else:
+            # Regular drawing without shadows
+            for model in self.models.values():
+                model.draw(camera, light)
 
     def destroy(self) -> None:
         """
