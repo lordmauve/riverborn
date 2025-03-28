@@ -18,12 +18,10 @@ class Mesh:
         return self.vertices["in_position"][:, 1].reshape(self.segments + 1, self.segments + 1)
 
 
-def make_terrain(
+def blank_terrain(
     segments: int,
     grid_width: float,
     grid_depth: float,
-    height_multiplier: float,
-    noise_scale: float,
 ) -> Mesh:
     """Create a grid of (segments+1) x (segments+1) vertices."""
     num_vertices = (segments + 1) * (segments + 1)
@@ -45,20 +43,8 @@ def make_terrain(
     heights = np.zeros((segments + 1, segments + 1), dtype=np.float32)
     for i, z in enumerate(zs):
         for j, x in enumerate(xs):
-            n = noise.pnoise2(
-                x * noise_scale,
-                z * noise_scale,
-                octaves=4,
-                persistence=0.5,
-                lacunarity=2.0,
-                repeatx=1024,
-                repeaty=1024,
-                base=42,
-            )
-            h = n * height_multiplier
-            heights[i, j] = h
             idx = i * (segments + 1) + j
-            vertices["in_position"][idx] = (x, h, z)
+            vertices["in_position"][idx] = (x, 0, z)
             vertices["in_uv"][idx] = (j / segments, i / segments)
 
     # Build indices for drawing triangles.
@@ -87,6 +73,38 @@ def make_terrain(
     recompute_normals(mesh)
     return mesh
 
+
+def make_terrain(
+    segments: int,
+    grid_width: float,
+    grid_depth: float,
+    height_multiplier: float,
+    noise_scale: float,
+) -> Mesh:
+    """Create a grid of (segments+1) x (segments+1) vertices."""
+    mesh = blank_terrain(segments, grid_width, grid_depth)
+    heights = mesh.heights
+
+    xs = np.linspace(-grid_width / 2, grid_width / 2, segments + 1)
+    zs = np.linspace(-grid_depth / 2, grid_depth / 2, segments + 1)
+
+    for i, z in enumerate(zs):
+        for j, x in enumerate(xs):
+            heights[i, j] = noise.pnoise2(
+                x * noise_scale,
+                z * noise_scale,
+                octaves=4,
+                persistence=0.5,
+                lacunarity=2.0,
+                repeatx=1024,
+                repeaty=1024,
+                base=42,
+            )
+
+    heights *= height_multiplier
+
+    recompute_normals(mesh)
+    return mesh
 
 
 def recompute_normals(mesh: Mesh) -> Mesh:

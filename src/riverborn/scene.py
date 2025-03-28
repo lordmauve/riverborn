@@ -33,9 +33,10 @@ import weakref
 from typing import List, Dict, Optional, Union, Tuple, Any
 from dataclasses import dataclass, field, asdict
 
+from riverborn import terrain
 from riverborn.camera import Camera
 from riverborn.shader import load_shader, BindableProgram
-from riverborn.terrain import make_terrain, Mesh
+from riverborn.terrain import blank_terrain, make_terrain, Mesh
 from pyglm.glm import array
 
 if typing.TYPE_CHECKING:
@@ -762,7 +763,40 @@ class Scene:
         """
         # Get appropriate shader for terrain
         mat = material or self.default_material
-        terrain_mesh = make_terrain(segments, width, depth, height, noise_scale)
+        terrain_mesh = terrain.make_terrain(segments, width, depth, height, noise_scale)
+        model = TerrainModel(terrain_mesh, self.ctx, mat, texture)
+        self.models[name] = model
+        return model
+
+    def load_terrain(self, name: str, width: float, depth: float,
+                       texture: Optional[Union[moderngl.Texture, np.ndarray]] = None,
+                       material: Optional[Material] = None) -> TerrainModel:
+        """
+        Create a terrain model and add it to the scene.
+
+        Args:
+            name: Name to identify the terrain model
+            segments: Number of grid segments
+            width: Width of the terrain
+            depth: Depth of the terrain
+            height: Height multiplier for the terrain
+            noise_scale: Scale of the noise function for terrain generation
+            texture: Optional texture for the terrain
+            material: Optional Material instance for the terrain
+
+        Returns:
+            The created TerrainModel
+        """
+        files = importlib.resources.files()
+        with (files / name).open('rb') as f:
+            heights = np.load(f)
+
+        terrain_mesh = terrain.blank_terrain(heights.shape[0] - 1, width, depth)
+        terrain_mesh.heights[:] = heights
+        terrain.recompute_normals(terrain_mesh)
+
+        # Get appropriate shader for terrain
+        mat = material or self.default_material
         model = TerrainModel(terrain_mesh, self.ctx, mat, texture)
         self.models[name] = model
         return model

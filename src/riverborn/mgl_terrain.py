@@ -1,3 +1,4 @@
+import atexit
 import importlib.resources
 from itertools import product
 import math
@@ -132,16 +133,32 @@ class WaterApp(mglw.WindowConfig):
             cast_shadows=True      # This terrain casts shadows
         )
 
-        terrain_model = self.scene.create_terrain(
-            'terrain',
-            segments=100,
-            width=200,
-            depth=200,
-            height=10,
-            noise_scale=0.05,
-            texture=terrain_texture,
-            material=terrain_material
-        )
+        try:
+            terrain_model = self.scene.load_terrain(
+                'data/terrain.npy',
+                width=200,
+                depth=200,
+                texture=terrain_texture,
+                material=terrain_material
+            )
+        except FileNotFoundError:
+            terrain_model = self.scene.create_terrain(
+                'terrain',
+                segments=100,
+                width=200,
+                depth=200,
+                height=10,
+                noise_scale=0.05,
+                texture=terrain_texture,
+                material=terrain_material
+            )
+        @atexit.register
+        def save_terrain():
+            terrain_path = Path(__file__).parent / 'data/terrain.npy'
+            terrain_path.parent.mkdir(parents=True, exist_ok=True)
+            # Save the terrain model to a file
+            with terrain_path.open('wb') as f:
+                np.save(f, terrain_model.mesh.heights, allow_pickle=False)
 
         # Create an instance of the terrain model
         self.terrain_instance = self.scene.add(terrain_model)
