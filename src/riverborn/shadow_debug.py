@@ -69,3 +69,20 @@ def render_shadow_map_to_screen(shadow_map_texture, near_plane=1.0, far_plane=10
 
     # Render the quad
     quad.render()
+
+
+
+def render_small_shadow_map(screen_width, screen_height, shadows, light):
+    ctx = mglw.ctx()
+    # Render debug view in corner
+    debug_size = int(min(screen_width, screen_height) * 0.3)
+    old_viewport = ctx.viewport
+    ctx.viewport = (0, 0, debug_size, debug_size)
+
+    render_shadow_map_to_screen(
+        shadows.shadow_map.depth_texture,
+        near_plane=light.near,
+        far_plane=light.far
+    )
+
+    ctx.viewport = old_viewport

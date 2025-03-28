@@ -7,16 +7,14 @@ import random
 import math
 import moderngl
 import moderngl_window as mglw
-import numpy as np
 from pyglm import glm
 
 from riverborn.camera import Camera
-from riverborn.scene import Scene, Model, Instance
+from riverborn.scene import Scene
 from riverborn.shadow import ShadowSystem, Light
 from riverborn.shader import load_shader
-from riverborn.heightfield import create_noise_texture, Instance as TerrainInstance
-from riverborn.terrain import make_terrain
-from riverborn.shadow_debug import render_shadow_map_to_screen
+from riverborn.heightfield import create_noise_texture
+from riverborn.shadow_debug import render_small_shadow_map
 
 
 class ShadowMappingDemo(mglw.WindowConfig):
@@ -32,7 +30,7 @@ class ShadowMappingDemo(mglw.WindowConfig):
         self.ctx.enable(moderngl.DEPTH_TEST)
 
         # Create a shadow-capable shader
-        self.shadow_program = load_shader('shadow', defines={'INSTANCED': '1'})
+        self.shadow_program = load_shader('shadow', defines={'INSTANCED': '1', 'ALPHA_TEST': '1'})
 
         # Create the scene
         self.scene = Scene()
@@ -60,35 +58,38 @@ class ShadowMappingDemo(mglw.WindowConfig):
         self.shadow_system = ShadowSystem(shadow_map_size=1024)
         self.shadow_system.set_light(self.light)
 
-        # Create terrain
-        terrain_mesh = make_terrain(100, 50, 50, 8, 0.05)
-        self.terrain = TerrainInstance(
-            terrain_mesh,
-            load_shader('shadow'),
-            create_noise_texture(1024, color=(0.6, 0.5, 0.4))
+        # Generate terrain texture
+        terrain_texture = create_noise_texture(size=512, color=(0.6, 0.5, 0.4))
+
+        # Create a terrain model and add it to the scene
+        terrain_model = self.scene.create_terrain(
+            'terrain',
+            self.shadow_program,
+            segments=100,
+            width=40,
+            depth=40,
+            height=5,
+            noise_scale=0.1,
+            texture=terrain_texture
         )
 
-        # Load a fern model (you can change this to any available model)
-        try:
-            self.plant_model = self.scene.load('fern.obj', self.shadow_program, capacity=50)
-            # Create plant instances
-            for _ in range(20):
-                inst = self.scene.add(self.plant_model)
-                # Random position on the terrain
-                inst.pos = (random.uniform(-20, 20), 0, random.uniform(-20, 20))
-                inst.rotate(random.uniform(0, 2 * math.pi), glm.vec3(0, 1, 0))
-                inst.scale = glm.vec3(random.uniform(0.05, 0.1))
-                inst.update()
-        except Exception as e:
-            print(f"Could not load plant model: {e}")
+        # Create an instance of the terrain model
+        self.terrain_instance = self.scene.add(terrain_model)
 
+        # Load a fern model (you can change this to any available model)
+        self.plant_model = self.scene.load_wavefront('fern.obj', self.shadow_program, capacity=50)
+        # Create plant instances
+        for _ in range(20):
+            inst = self.scene.add(self.plant_model)
+            # Random position on the terrain
+            inst.pos = (random.uniform(-20, 20), 0, random.uniform(-20, 20))
+            inst.rotate(random.uniform(0, 2 * math.pi), glm.vec3(0, 1, 0))
+            inst.scale = glm.vec3(random.uniform(0.05, 0.1))
+            inst.update()
+        # Add the terrain instance to the scene
         # Time tracking
         self.time = 0
         self.rotate_light = True
-
-        # Debug mode - set to True to see the shadow map
-        self.debug_mode = True
-        self.debug_scale = 0.3  # Size of debug view as proportion of screen
 
     def on_resize(self, width, height):
         self.camera.set_aspect(width / height)
@@ -102,7 +103,7 @@ class ShadowMappingDemo(mglw.WindowConfig):
             angle = self.time * 0.5
             self.light.direction = glm.normalize(glm.vec3(
                 math.sin(angle),
-                -0.8,
+                -0.33,
                 math.cos(angle)
             ))
             self.light.update_matrices()
@@ -114,15 +115,14 @@ class ShadowMappingDemo(mglw.WindowConfig):
         ctx = mglw.ctx()
         ctx.screen.use()
 
-        # Render terrain
-        #self.shadow_system.setup_shadow_shader(self.camera, self.terrain.prog, texture0=self.terrain.texture, m_model=self.terrain.matrix)
-        #self.terrain.vao.render()
-
-        # Set up shadow shader with common uniforms
-        self.shadow_system.setup_shadow_shader(self.camera, self.shadow_system.shadow_shader_instanced, texture0=self.scene.models['fern.obj'].textures['diffuse.tga'])
-
         # Render scene objects
-        self.scene.draw(self.camera, sun_dir=self.light.direction)
+        self.scene.draw_with_shadows(self.camera, self.light, self.shadow_system)
+
+        render_small_shadow_map(
+            *self.wnd.buffer_size,
+            self.shadow_system,
+            self.light
+        )
 
     def on_key_event(self, key, action, modifiers):
         if action == self.wnd.keys.ACTION_PRESS:

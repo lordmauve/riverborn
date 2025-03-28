@@ -403,7 +403,7 @@ def enrich_program(program: moderngl.Program) -> None:
                     except struct.error as e:
                         raise ValueError(f"Invalid value for {obj.fmt} uniform '{k}': {val!r}") from e
         for k, v in uniforms.items():
-            warnings.warn(f"Unused uniform passed to {program.label}: '{k}': {v!r}", UserWarning, stacklevel=2)
+            warnings.warn(f"Unused uniform '{k}' passed to {program.label}: {type(v)}", UserWarning, stacklevel=2)
         if missing:
             raise ValueError(f"Missing uniforms: {', '.join(missing)}")
 

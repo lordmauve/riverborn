@@ -28,11 +28,12 @@ from pyglm import glm
 import random
 import math
 import weakref
-from typing import List, Dict, Optional, Union, Any, Tuple
+from typing import List, Dict, Optional, Union
 
 from riverborn.camera import Camera
 from riverborn.shader import load_shader
 from riverborn.terrain import make_terrain, Mesh
+from pyglm.glm import array
 
 
 class Light:
@@ -129,9 +130,8 @@ class Model:
         self.ctx = ctx
         self.program = program
         self.parts = []
-        self.instance_capacity = capacity
         self.instance_count = 0
-        self.instance_matrices = np.zeros((capacity, 4, 4), dtype='f4')
+        self.instance_matrices = array.zeros(capacity, glm.mat4)
         self.instances_dirty = False
         self.instance_buffer = ctx.buffer(reserve=capacity * 16 * 4)
         self.instance_refs = weakref.WeakValueDictionary()
@@ -180,10 +180,9 @@ class Model:
         Returns:
             Index of the instance in the buffer
         """
-        if self.instance_count >= self.instance_capacity:
-            self.instance_capacity *= 2
-            self.instance_matrices.resize((self.instance_capacity, 4, 4), refcheck=False)
-            self.instance_buffer.orphan(size=self.instance_capacity * 16 * 4)
+        if self.instance_count >= len(self.instance_matrices):
+            self.instance_matrices = self.instance_matrices.repeat(2)
+            self.instance_buffer.orphan(size=len(self.instance_matrices) * 16 * 4)
         index = self.instance_count
         self.instance_matrices[index] = matrix
         self.instance_count += 1
@@ -214,21 +213,43 @@ class Model:
             camera: Camera object
             light: Light object for lighting calculations
         """
-        if self.instances_dirty:
-            self.instance_buffer.write(self.instance_matrices[:self.instance_count])
-            self.instances_dirty = False
+        self.flush_instances()
 
         for part in self.parts:
             self.program.bind(
                 m_proj=camera.get_proj_matrix(),
                 m_view=camera.get_view_matrix(),
-                light_dir=light.direction,
+                light_dir=-light.direction,
                 light_color=light.color,
                 ambient_color=light.ambient,
                 light_space_matrix=light.light_space_matrix,
                 **part['uniforms']
             )
             part['vao'].render(instances=self.instance_count)
+
+    def draw_with_shadows(self, camera: Camera, light: Light, shadow_system) -> None:
+        # Set up shadow shader with common uniforms
+        for part in self.parts:
+            self.program.bind(
+                m_proj=camera.get_proj_matrix(),
+                m_view=camera.get_view_matrix(),
+                light_dir=-light.direction,
+                light_color=light.color,
+                ambient_color=light.ambient,
+                camera_pos=camera.eye,
+                light_space_matrix=light.light_space_matrix,
+                shadow_map=shadow_system.shadow_map.depth_texture,
+                use_pcf=shadow_system.use_pcf,
+                pcf_radius=1.0,
+                shadow_bias=0.01,
+                **part['uniforms']
+            )
+            part['vao'].render(instances=self.instance_count)
+
+    def flush_instances(self):
+        if self.instances_dirty:
+            self.instance_buffer.write(self.instance_matrices[:self.instance_count])
+            self.instances_dirty = False
 
     def destroy(self) -> None:
         """
@@ -556,10 +577,22 @@ class Scene:
 
         Args:
             camera: Camera object with view and projection matrices
-            sun_dir: Directional light vector
+            light: Light object for lighting calculations
         """
         for model in self.models.values():
             model.draw(camera, light)
+
+    def draw_with_shadows(self, camera: Camera, light: Light, shadows) -> None:
+        """
+        Draw all models with their instances in the scene.
+
+        Args:
+            camera: Camera object with view and projection matrices
+            light: Light object for lighting calculations
+            shadows: Shadow system for rendering shadows
+        """
+        for model in self.models.values():
+            model.draw_with_shadows(camera, light, shadows)
 
     def destroy(self) -> None:
         """

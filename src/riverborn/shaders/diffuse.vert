@@ -17,7 +17,7 @@ out vec2 frag_uv;
 
 void main() {
     frag_uv = in_texcoord_0;
-    mat4 mv = m_view * transpose(m_model);
+    mat4 mv = m_view * m_model;
     mat3 normal_matrix = inverse(mat3(m_model));
     frag_normal = normalize(normal_matrix * in_normal);
     gl_Position = m_proj * mv * vec4(in_position, 1.0);

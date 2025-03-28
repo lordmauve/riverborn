@@ -10,7 +10,7 @@ from riverborn.shadow import ShadowSystem, Light
 from riverborn.shader import load_shader
 from riverborn.terrain import make_terrain
 from riverborn.heightfield import create_noise_texture, Instance as TerrainInstance
-from riverborn.shadow_debug import render_shadow_map_to_screen
+from riverborn.shadow_debug import render_shadow_map_to_screen, render_small_shadow_map
 
 
 class ShadowDebugDemo(mglw.WindowConfig):
@@ -151,20 +151,11 @@ class ShadowDebugDemo(mglw.WindowConfig):
             self.terrain.vao.render()
 
             if self.debug_mode:
-
-                # Render debug view in corner
-                screen_width, screen_height = self.wnd.buffer_size
-                debug_size = int(min(screen_width, screen_height) * 0.3)
-                old_viewport = ctx.viewport
-                ctx.viewport = (0, 0, debug_size, debug_size)
-
-                render_shadow_map_to_screen(
-                    self.shadow_system.shadow_map.depth_texture,
-                    near_plane=self.light.near,
-                    far_plane=self.light.far
+                render_small_shadow_map(
+                    *self.wnd.buffer_size,
+                    self.shadow_system,
+                    self.light
                 )
-
-                ctx.viewport = old_viewport
 
     debug_mode = True
     recorder = None

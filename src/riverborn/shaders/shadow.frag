@@ -6,7 +6,7 @@ in vec2 frag_uv;
 in vec3 frag_pos;
 in vec4 frag_pos_light_space;
 
-uniform sampler2D texture0;
+uniform sampler2D diffuse_tex;
 uniform vec3 light_dir;
 uniform vec3 light_color;
 uniform vec3 ambient_color;
@@ -20,7 +20,7 @@ out vec4 fragColor;
 
 void main() {
     // Sample texture
-    vec4 tex_color = texture(texture0, frag_uv);
+    vec4 tex_color = texture(diffuse_tex, frag_uv);
     if (tex_color.a < 0.3) {
         discard;
     }

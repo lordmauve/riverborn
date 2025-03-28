@@ -40,8 +40,8 @@ class ShadowMap:
         self.fbo = self.ctx.framebuffer(depth_attachment=self.depth_texture)
 
         # Load depth shader program
-        self.depth_shader_instanced = load_shader('depth', defines={'INSTANCED': '1'})
-        self.depth_shader_uniform = load_shader('depth')
+        self.depth_shader_instanced = load_shader('depth', defines={'INSTANCED': '1', 'ALPHA_TEST': '1'})
+        self.depth_shader_uniform = load_shader('depth', defines={'ALPHA_TEST': '1'})
 
 
 class ShadowSystem:
@@ -91,16 +91,8 @@ class ShadowSystem:
 
         # Render each model in the scene
         for model_name, model in scene.models.items():
-            # Update light space matrix uniform for the depth shader
-            depth_shader = self.shadow_map.depth_shader_instanced
-            depth_shader.bind(
-                light_space_matrix=self.light.light_space_matrix
-            )
-
             # If instances_dirty is set, update the instance buffer
-            if model.instances_dirty:
-                model.instance_buffer.write(model.instance_matrices[:model.instance_count])
-                model.instances_dirty = False
+            model.flush_instances()
 
             # Render each part of the model
             for part in model.parts:
@@ -108,22 +100,29 @@ class ShadowSystem:
                 # This creates a temporary VAO just for the depth pass
                 # The structure depends on the vertex format from the model's parts
 
+                # Update light space matrix uniform for the depth shader
+                depth_shader = self.shadow_map.depth_shader_instanced
+                depth_shader.bind(
+                    light_space_matrix=self.light.light_space_matrix,
+                    **part['uniforms']
+                )
+
                 # Find the right vertex format based on model type
                 if isinstance(model, WavefrontModel):
-                    vertex_format = '2f 3f 3f'  # texcoord, normal, position
-                    position_attr_index = 2  # position is 3rd attribute (index 2)
+                    vertex_format = '2f 3x4 3f'  # texcoord, normal, position
+                    attrs = 'in_texcoord_0', 'in_position'
                 elif isinstance(model, TerrainModel):
-                    vertex_format = '3f 3f 2f'  # position, normal, texcoord
-                    position_attr_index = 0  # position is 1st attribute (index 0)
+                    vertex_format = '3f 3x4 2f'  # position, normal, texcoord
+                    attrs = 'in_position', 'in_texcoord_0'
                 else:
                     # Default case - attempt to use just position component
                     # This will need to be adjusted for other model types
                     vertex_format = '3f'  # position only
-                    position_attr_index = 0
+                    attrs = 'in_position'
 
                 # Extract just the position component for depth pass
                 vao_args = [
-                    (part['vbo'], vertex_format, *(['_'] * position_attr_index), 'in_position'),
+                    (part['vbo'], vertex_format, *attrs),
                     (model.instance_buffer, '16f4/i', 'm_model')
                 ]
 
@@ -134,6 +133,7 @@ class ShadowSystem:
                     vao = ctx.vertex_array(depth_shader, vao_args)
 
                 # Render this part with instancing
+                print(f"Rendering {model.instance_count}")
                 vao.render(instances=model.instance_count)
 
                 # Clean up the temporary VAO
