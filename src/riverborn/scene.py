@@ -270,7 +270,7 @@ class Model:
         defines = {
             'INSTANCED': '1',  # Always use instancing for models
         }
-        if self.material.alpha_test and 'diffuse_tex' in part.uniforms:
+        if 'diffuse_tex' in part.uniforms and 'in_texcoord_0' in part.vbotype:
             defines['ALPHA_TEST'] = '1'
             defines['TEXTURE'] = '1'
 
@@ -423,10 +423,12 @@ class WavefrontModel(Model):
 
                 # Create uniforms dictionary for textures if present
                 uniforms = {}
-                if material.texture:
+                if material.texture and 'in_texcoord_0' in vbotype:
                     uniforms = {
                         'diffuse_tex': self.load_texture(Path(material.texture.path).name)
                     }
+                else:
+                    vbotype = subformat(vbotype, normal=True)
 
                 # Create a Part with the appropriate configuration
                 part = Part(
