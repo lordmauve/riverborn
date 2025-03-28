@@ -25,7 +25,17 @@ void main() {
         discard;
     }
 
+    // Get the normal and adjust it if we're viewing the back face
     vec3 normal = normalize(frag_normal);
+    vec3 view_dir = normalize(camera_pos - frag_pos);
+
+    // Check if we're viewing the back face by comparing the view direction with the normal
+    // If the dot product is negative, we're looking at the back face
+    if (dot(view_dir, normal) < 0.0) {
+        // Flip the normal for back faces
+        normal = -normal;
+    }
+
     vec3 light = normalize(light_dir);
 
     // Ambient
@@ -36,7 +46,6 @@ void main() {
     vec3 diffuse = diff * light_color;
 
     // Specular (optional)
-    vec3 view_dir = normalize(camera_pos - frag_pos);
     vec3 reflect_dir = reflect(-light, normal);
     float spec = pow(max(dot(view_dir, reflect_dir), 0.0), 32.0);
     vec3 specular = 0.2 * spec * light_color;
@@ -51,7 +60,6 @@ void main() {
 
     // Combine lighting with shadow
     vec3 lighting = ambient + (1.0 - shadow) * diffuse;
-
 
     // Final color
     fragColor = vec4(lighting * tex_color.rgb + specular, 1.0);
