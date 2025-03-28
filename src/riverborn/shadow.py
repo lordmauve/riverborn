@@ -133,7 +133,6 @@ class ShadowSystem:
                     vao = ctx.vertex_array(depth_shader, vao_args)
 
                 # Render this part with instancing
-                print(f"Rendering {model.instance_count}")
                 vao.render(instances=model.instance_count)
 
                 # Clean up the temporary VAO
