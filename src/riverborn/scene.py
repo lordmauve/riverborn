@@ -29,6 +29,8 @@ import random
 import math
 import weakref
 from typing import List, Dict, Optional, Union
+from dataclasses import dataclass, field, asdict
+from typing import Dict, Any
 
 from riverborn.camera import Camera
 from riverborn.shader import load_shader
@@ -501,6 +503,41 @@ class Instance:
         self._deleted = True
 
 
+@dataclass
+class Material:
+    """Material properties for rendering models with specific shaders."""
+    double_sided: bool = False
+    translucent: bool = False
+    transmissivity: float = 0.0
+    receive_shadows: bool = True
+    alpha_test: bool = False
+
+    def to_defines(self) -> Dict[str, str]:
+        """Convert material properties to shader defines."""
+        defines = {}
+
+        if self.double_sided:
+            defines['DOUBLE_SIDED'] = '1'
+
+        if self.translucent:
+            defines['TRANSLUCENT'] = '1'
+            defines['TRANSMISSIVITY'] = str(self.transmissivity)
+
+        if self.receive_shadows:
+            defines['RECEIVE_SHADOWS'] = '1'
+
+        if self.alpha_test:
+            defines['ALPHA_TEST'] = '1'
+
+        return defines
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'Material':
+        """Create a Material instance from a dictionary."""
+        # Filter the dict to only include fields that exist in the dataclass
+        valid_fields = {k: v for k, v in data.items() if k in cls.__dataclass_fields__}
+        return cls(**valid_fields)
+
 
 class Scene:
     """
@@ -512,19 +549,55 @@ class Scene:
         self.ctx = mglw.ctx()
         self.models: Dict[str, Model] = {}
         self.instances: List[Instance] = []
+        # Default material properties
+        self.default_material = Material()
 
-    def load_wavefront(self, filename: str, program: moderngl.Program, capacity: int = 100) -> WavefrontModel:
+    def _get_shader_for_model(self, base_shader: str, material: Material = None, **extra_defines) -> moderngl.Program:
+        """
+        Get an appropriate shader for a model based on material properties and rendering requirements.
+
+        Args:
+            base_shader: Base shader name ('shadow', 'diffuse', etc.)
+            material: Optional Material instance
+            extra_defines: Additional shader defines
+
+        Returns:
+            Compiled shader program
+        """
+        # Use default material if none is provided
+        mat = material or self.default_material
+
+        # Set up shader defines based on material properties
+        defines = {
+            'INSTANCED': '1',  # Always use instancing for models
+        }
+
+        # Add material properties as defines
+        defines.update(mat.to_defines())
+
+        # Add extra defines
+        defines.update(extra_defines)
+
+        # Load and return the shader
+        return load_shader(base_shader, **defines)
+
+    def load_wavefront(self, filename: str, material: Material = None, capacity: int = 100) -> WavefrontModel:
         """
         Load an OBJ model from the assets package and create its VAO and buffers.
 
         Args:
             filename: Name of the OBJ file in the assets package
-            program: Shader program to use
+            material: Optional Material instance for the model
             capacity: Initial instance capacity
 
         Returns:
             The loaded WavefrontModel
         """
+        # Determine the appropriate shader based on material properties
+        mat = material or self.default_material
+        shader_name = 'shadow' if mat.receive_shadows else 'texture_alpha'
+        program = self._get_shader_for_model(shader_name, mat)
+
         files = importlib.resources.files('riverborn')
         with importlib.resources.as_file(files / f'models/{filename}') as model_path:
             mesh = pywavefront.Wavefront(str(model_path), create_materials=True, collect_faces=True)
@@ -532,26 +605,31 @@ class Scene:
         self.models[filename] = model
         return model
 
-    def create_terrain(self, name: str, program: moderngl.Program,
-                      segments: int, width: float, depth: float,
-                      height: float, noise_scale: float,
-                      texture: Optional[Union[moderngl.Texture, np.ndarray]] = None) -> TerrainModel:
+    def create_terrain(self, name: str, segments: int, width: float, depth: float,
+                       height: float, noise_scale: float,
+                       texture: Optional[Union[moderngl.Texture, np.ndarray]] = None,
+                       material: Material = None) -> TerrainModel:
         """
         Create a terrain model and add it to the scene.
 
         Args:
             name: Name to identify the terrain model
-            program: Shader program to use
             segments: Number of grid segments
             width: Width of the terrain
             depth: Depth of the terrain
             height: Height multiplier for the terrain
             noise_scale: Scale of the noise function for terrain generation
             texture: Optional texture for the terrain
+            material: Optional Material instance for the terrain
 
         Returns:
             The created TerrainModel
         """
+        # Get appropriate shader for terrain
+        mat = material or self.default_material
+        shader_name = 'shadow' if mat.receive_shadows else 'diffuse'
+        program = self._get_shader_for_model(shader_name, mat)
+
         terrain_mesh = make_terrain(segments, width, depth, height, noise_scale)
         model = TerrainModel(terrain_mesh, self.ctx, program, texture)
         self.models[name] = model

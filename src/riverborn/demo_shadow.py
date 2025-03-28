@@ -10,9 +10,8 @@ import moderngl_window as mglw
 from pyglm import glm
 
 from riverborn.camera import Camera
-from riverborn.scene import Scene
+from riverborn.scene import Scene, Material
 from riverborn.shadow import ShadowSystem, Light
-from riverborn.shader import load_shader
 from riverborn.heightfield import create_noise_texture
 from riverborn.shadow_debug import render_small_shadow_map
 
@@ -28,9 +27,6 @@ class ShadowMappingDemo(mglw.WindowConfig):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.ctx.enable(moderngl.DEPTH_TEST)
-
-        # Create a shadow-capable shader
-        self.shadow_program = load_shader('shadow', INSTANCED=1, ALPHA_TEST=1)
 
         # Create the scene
         self.scene = Scene()
@@ -62,22 +58,38 @@ class ShadowMappingDemo(mglw.WindowConfig):
         terrain_texture = create_noise_texture(size=512, color=(0.6, 0.5, 0.4))
 
         # Create a terrain model and add it to the scene
+        # Define terrain material properties using the new Material dataclass
+        terrain_material = Material(
+            receive_shadows=True
+        )
+
         terrain_model = self.scene.create_terrain(
             'terrain',
-            self.shadow_program,
             segments=100,
             width=40,
             depth=40,
             height=5,
             noise_scale=0.1,
-            texture=terrain_texture
+            texture=terrain_texture,
+            material=terrain_material
         )
 
         # Create an instance of the terrain model
         self.terrain_instance = self.scene.add(terrain_model)
 
-        # Load a fern model (you can change this to any available model)
-        self.plant_model = self.scene.load_wavefront('fern.obj', self.shadow_program, capacity=50)
+        # Define plant material properties using the new Material dataclass
+        # Plants are double-sided and have some translucency
+        plant_material = Material(
+            double_sided=True,
+            translucent=True,
+            transmissivity=0.3,
+            receive_shadows=True,
+            alpha_test=True
+        )
+
+        # Load a fern model with appropriate material properties
+        self.plant_model = self.scene.load_wavefront('fern.obj', material=plant_material, capacity=50)
+
         # Create plant instances
         for _ in range(20):
             inst = self.scene.add(self.plant_model)
@@ -86,7 +98,10 @@ class ShadowMappingDemo(mglw.WindowConfig):
             inst.rotate(random.uniform(0, 2 * math.pi), glm.vec3(0, 1, 0))
             inst.scale = glm.vec3(random.uniform(0.05, 0.1))
             inst.update()
-        # Add the terrain instance to the scene
+
+        # Debug mode flag
+        self.debug_mode = False
+
         # Time tracking
         self.time = 0
         self.rotate_light = True
