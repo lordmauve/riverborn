@@ -10,10 +10,12 @@ uniform vec3 ambient_color;
 out vec4 fragColor;
 
 void main() {
+    vec4 diffuse = texture(diffuse_tex, frag_uv);
+    if (diffuse.a < 0.3) discard;
+
     vec3 normal = normalize(frag_normal);
-    vec3 light = normalize(-light_dir);
-    float diffuse = max(dot(normal, light), 0.0);
-    vec3 tex_color = texture(diffuse_tex, frag_uv).rgb;
-    vec3 color = ambient_color * tex_color + diffuse * light_color * tex_color;
+    vec3 light = normalize(light_dir);
+    float diffuseLight = max(dot(normal, light), 0.0);
+    vec3 color = (ambient_color + diffuseLight * light_color) * diffuse.rgb;
     fragColor = vec4(color, 1.0);
 }

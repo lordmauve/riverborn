@@ -56,6 +56,7 @@ class Light:
         proj_matrix: Light's projection matrix
         light_space_matrix: Combined projection and view matrix
         shadows: Whether this light casts shadows
+        shadow_system: Shadow system for this light (created on demand)
     """
     def __init__(self,
                  direction: vec3ish,
@@ -89,6 +90,7 @@ class Light:
         self.far = far
         self.target = glm.vec3(target)
         self.shadows = shadows
+        self.shadow_system: 'ShadowSystem' | None = None  # Will be created on demand
 
         self.update_matrices()
 
@@ -112,6 +114,13 @@ class Light:
 
         # Combined light space matrix
         self.light_space_matrix = self.proj_matrix * self.view_matrix
+
+    def get_shadow_system(self):
+        """Get or create the shadow system for this light."""
+        if self.shadows and self.shadow_system is None:
+            from riverborn.shadow import ShadowSystem
+            self.shadow_system = ShadowSystem(self, shadow_map_size=2048)
+        return self.shadow_system
 
 
 class Model:
@@ -232,14 +241,16 @@ class Model:
         # Determine shader type based on shadow state and material properties
         shader_type = 'shadow' if (light.shadows and self.material.receive_shadows) else 'diffuse'
 
-        # For alpha tested materials, use texture_alpha when not using shadows
+        # For alpha tested materials, use diffuse when not using shadows
         if self.material.alpha_test and shader_type != 'shadow':
-            shader_type = 'texture_alpha'
+            shader_type = 'diffuse'
 
         # Set up shader defines based on material properties
         defines = {
             'INSTANCED': '1',  # Always use instancing for models
         }
+        if self.material.alpha_test:
+            defines['ALPHA_TEST'] = '1'
 
         # Add material defines if using a shadow shader
         if shader_type == 'shadow':
@@ -259,24 +270,38 @@ class Model:
 
         # Get the appropriate shader based on current state
         shader = self._get_appropriate_shader(light)
+        shader_name = getattr(shader, 'label', '').lower()
 
         for part in self.parts:
             # Create uniform dict based on shader and rendering state
             uniforms = {
                 'm_proj': camera.get_proj_matrix(),
                 'm_view': camera.get_view_matrix(),
-                'light_dir': -light.direction,
-                'light_color': light.color,
-                'ambient_color': light.ambient,
             }
 
             # Add part-specific uniforms (textures, etc.)
-            uniforms.update(part['uniforms'])
+            if 'diffuse_tex' in part['uniforms'] and 'diffuse_tex' in shader:
+                # Copy texture to the uniform name expected by the shader
+                if 'texture_alpha' in shader_name:
+                    uniforms['texture0'] = part['uniforms']['diffuse_tex']
+                else:
+                    uniforms['diffuse_tex'] = part['uniforms']['diffuse_tex']
+
+            # Add lighting uniforms depending on shader
+            if 'light_dir' in shader:
+                uniforms['light_dir'] = -light.direction
+            elif 'sun_dir' in shader:
+                uniforms['sun_dir'] = -light.direction
+
+            if 'light_color' in shader:
+                uniforms['light_color'] = light.color
+            if 'ambient_color' in shader:
+                uniforms['ambient_color'] = light.ambient
 
             # Add shadow-specific uniforms if needed
-            if light.shadows and self.material.receive_shadows:
+            if light.shadows and self.material.receive_shadows and 'shadow' in shader_name:
                 # Get the shadow system from light if available
-                shadow_system = getattr(light, '_shadow_system', None)
+                shadow_system = light.get_shadow_system()
                 if shadow_system:
                     shadow_map = shadow_system.shadow_map.depth_texture
                     uniforms.update({
@@ -730,21 +755,19 @@ class Scene:
         """
         # Check if we need to use shadows
         if light.shadows:
-            # Create shadow system on demand if needed
-            if self._shadow_system is None:
-                from riverborn.shadow import ShadowSystem
-                self._shadow_system = ShadowSystem(light, shadow_map_size=2048)
+            # Get or create the shadow system from the light
+            shadow_system = light.get_shadow_system()
+
+            # Store it on the scene for debug purposes
+            # (needed for rendering the shadow map preview)
+            self._shadow_system = shadow_system
 
             # Render depth pass
-            self._shadow_system.render_depth(self)
+            shadow_system.render_depth(self)
 
-            # Render the scene with shadows
-            for model in self.models.values():
-                model.draw(camera, light)
-        else:
-            # Regular drawing without shadows
-            for model in self.models.values():
-                model.draw(camera, light)
+        # Render all models (they will handle shadow uniforms internally if needed)
+        for model in self.models.values():
+            model.draw(camera, light)
 
     def destroy(self) -> None:
         """

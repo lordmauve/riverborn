@@ -123,11 +123,10 @@ class ShadowMappingDemo(mglw.WindowConfig):
         self.scene.draw(self.camera, self.light)
 
         # Display a small shadow map preview
-        # Note: we need to access the shadow system through the scene's private attribute
-        if self.light.shadows:
+        if self.light.shadows and self.light.shadow_system:
             render_small_shadow_map(
                 *self.wnd.buffer_size,
-                self.scene._shadow_system,
+                self.light.shadow_system,
                 self.light
             )
 
@@ -155,7 +154,7 @@ class ShadowMappingDemo(mglw.WindowConfig):
                     glm.mat4(1.0),
                     -dx * sensitivity,
                     glm.vec3(0, 1, 0)
-                ) * glm.vec4(self.camera.eye, 1.0)
+                ) * glm.vec4(self.camera.eye, 1.0)  # type: ignore  # bad type info
             )
             self.camera.look_at(glm.vec3(0, 0, 0))
 

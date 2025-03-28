@@ -415,7 +415,7 @@ class BindableProgram(moderngl.Program):
         for k, v in uniforms.items():
             warnings.warn(f"Unused uniform '{k}' passed to {self.label}: {type(v)}", UserWarning, stacklevel=2)
         if missing:
-            raise ValueError(f"Missing uniforms: {', '.join(missing)}")
+            raise ValueError(f"Missing uniforms in {self.label}: {', '.join(missing)}")
 
 
 def enrich_program(program: moderngl.Program) -> BindableProgram:
