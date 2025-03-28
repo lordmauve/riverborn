@@ -5,74 +5,9 @@ import numpy as np
 from pyglm import glm
 
 from riverborn.camera import Camera
-from riverborn.scene import Scene, Model
+from riverborn.scene import Scene, Model, WavefrontModel, TerrainModel, Light
 from riverborn.shader import load_shader
 
-
-class Light:
-    """Directional light with shadow mapping capabilities.
-
-    Attributes:
-        direction: Direction of the light (will be normalized)
-        color: Color of the light
-        ambient: Ambient color of the light
-        position: Computed position based on direction and distance
-        view_matrix: Light's view matrix
-        proj_matrix: Light's projection matrix
-        light_space_matrix: Combined projection and view matrix
-    """
-    def __init__(self,
-                 direction: glm.vec3,
-                 color: glm.vec3 = glm.vec3(1.0),
-                 ambient: glm.vec3 = glm.vec3(0.1),
-                 distance: float = 100.0,
-                 ortho_size: float = 50.0,
-                 near: float = 1.0,
-                 far: float = 200.0,
-                 target: glm.vec3 = glm.vec3(0.0)):
-        """Initialize the light.
-
-        Args:
-            direction: Direction of the light
-            color: Color of the light
-            ambient: Ambient color in shadow areas
-            distance: Distance at which to place the light
-            ortho_size: Size of the orthographic projection box
-            near: Near plane distance
-            far: Far plane distance
-            target: Target point the light looks at (center of the shadow projection)
-        """
-        self.direction = glm.normalize(glm.vec3(direction))
-        self.color = glm.vec3(color)
-        self.ambient = glm.vec3(ambient)
-        self.distance = distance
-        self.ortho_size = ortho_size
-        self.near = near
-        self.far = far
-        self.target = glm.vec3(target)
-
-        self.update_matrices()
-
-    def update_matrices(self):
-        """Update view and projection matrices."""
-        # Position the light by moving in the opposite direction from the target
-        self.position = self.target - self.direction * self.distance
-
-        # Create view matrix looking from light position toward the target
-        self.view_matrix = glm.lookAt(
-            self.position,             # eye position
-            self.target,               # looking at target
-            glm.vec3(0.0, 1.0, 0.0)    # up vector
-        )
-
-        # Create orthographic projection matrix
-        size = self.ortho_size
-        self.proj_matrix = glm.ortho(
-            -size, size, -size, size, self.near, self.far
-        )
-
-        # Combined light space matrix
-        self.light_space_matrix = self.proj_matrix * self.view_matrix
 
 
 class ShadowMap:
@@ -154,37 +89,64 @@ class ShadowSystem:
         previous_viewport = ctx.viewport
         ctx.viewport = (0, 0, self.shadow_map.width, self.shadow_map.height)
 
-        # Update light space matrix uniform for the depth shader using bind() helper
-        depth_shader = self.shadow_map.depth_shader_instanced
-        depth_shader.bind(
-            light_space_matrix=self.light.light_space_matrix
-        )
-
         # Render each model in the scene
         for model_name, model in scene.models.items():
-            # Create VAOs for each part of the model
-            vaos = []
-            for part in model.parts:
-                # Only need position for depth pass
-                vao = ctx.vertex_array(
-                    depth_shader,
-                    [
-                        (part['vbo'], '3f', 'in_position'),
-                        (model.instance_buffer, '16f4/i', 'm_model')
-                    ],
-                    part.get('ibo', None)
-                )
-                vaos.append(vao)
+            # Update light space matrix uniform for the depth shader
+            depth_shader = self.shadow_map.depth_shader_instanced
+            depth_shader.bind(
+                light_space_matrix=self.light.light_space_matrix
+            )
 
-            # Render all parts with instancing
-            for vao in vaos:
+            # If instances_dirty is set, update the instance buffer
+            if model.instances_dirty:
+                model.instance_buffer.write(model.instance_matrices[:model.instance_count])
+                model.instances_dirty = False
+
+            # Render each part of the model
+            for part in model.parts:
+                # Create VAO specifically for the depth pass
+                # This creates a temporary VAO just for the depth pass
+                # The structure depends on the vertex format from the model's parts
+
+                # Find the right vertex format based on model type
+                if isinstance(model, WavefrontModel):
+                    vertex_format = '2f 3f 3f'  # texcoord, normal, position
+                    position_attr_index = 2  # position is 3rd attribute (index 2)
+                elif isinstance(model, TerrainModel):
+                    vertex_format = '3f 3f 2f'  # position, normal, texcoord
+                    position_attr_index = 0  # position is 1st attribute (index 0)
+                else:
+                    # Default case - attempt to use just position component
+                    # This will need to be adjusted for other model types
+                    vertex_format = '3f'  # position only
+                    position_attr_index = 0
+
+                # Extract just the position component for depth pass
+                vao_args = [
+                    (part['vbo'], vertex_format, *(['_'] * position_attr_index), 'in_position'),
+                    (model.instance_buffer, '16f4/i', 'm_model')
+                ]
+
+                # Create the VAO (with or without indices)
+                if 'ibo' in part:
+                    vao = ctx.vertex_array(depth_shader, vao_args, part['ibo'])
+                else:
+                    vao = ctx.vertex_array(depth_shader, vao_args)
+
+                # Render this part with instancing
                 vao.render(instances=model.instance_count)
+
+                # Clean up the temporary VAO
+                vao.release()
 
         # Restore viewport
         ctx.viewport = previous_viewport
 
-    def setup_shadow_shader(self, camera: Camera, shader: moderngl.Program, **uniforms):
-        """Set up the shadow shader with common uniforms."""
+    def setup_shadow_shader(self, camera: Camera, model: Model, **uniforms):
+        """Set up the shadow shader for a specific model."""
+        # Choose the appropriate shader for the model
+        shader = self.shadow_shader_instanced
+
         shader.bind(
             m_view=camera.get_view_matrix(),
             m_proj=camera.get_proj_matrix(),
@@ -200,35 +162,33 @@ class ShadowSystem:
             **uniforms
         )
 
-    def render_model_with_shadows(self, model: Model):
-        """Render a single model with shadows applied.
+        return shader
+
+    def render_scene_with_shadows(self, scene: Scene, camera: Camera):
+        """Render a complete scene with shadows applied.
 
         Args:
-            model: The model to render
+            scene: The scene to render
+            camera: The camera to use for rendering
         """
-        shader = self.shadow_shader
+        # First render the depth pass from light's perspective
+        self.render_depth(scene)
+
+        # Setup viewport for main rendering
         ctx = mglw.ctx()
+        ctx.enable(moderngl.DEPTH_TEST)
 
-        # Update instance buffer if needed
-        if model.instances_dirty:
-            model.instance_buffer.write(model.instance_matrices[:model.instance_count])
-            model.instances_dirty = False
+        # Now render the scene with shadows
+        for model_name, model in scene.models.items():
+            # Set up the shadow shader for this model
+            shader = self.setup_shadow_shader(camera, model)
 
-        # Render each part of the model
-        for part in model.parts:
-            if texture := part.get('texture'):
-                texture.use(location=0)
-                shader['texture0'].value = 0
+            # Temporarily override the model's program
+            original_program = model.program
+            model.program = shader
 
-            # Create VAO for this part
-            vao = ctx.vertex_array(
-                shader,
-                [
-                    (part['vbo'], '3f 3f 2f', 'in_position', 'in_normal', 'in_texcoord_0'),
-                    (model.instance_buffer, '16f4/i', 'm_model')
-                ],
-                part.get('ibo', None)
-            )
+            # Render the model with our shadow shader
+            model.draw(camera, -self.light.direction)
 
-            # Render all instances
-            vao.render(instances=model.instance_count)
+            # Restore the original program
+            model.program = original_program

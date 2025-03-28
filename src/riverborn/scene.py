@@ -2,12 +2,13 @@
 Scene system for instanced rendering using ModernGL and PyWavefront.
 
 This module defines a minimal scene management system supporting instanced rendering
-of OBJ models using ModernGL. Each model holds a buffer of instance transformation
+of 3D meshes using ModernGL. Each model holds a buffer of instance transformation
 matrices. These matrices are used to render multiple instances of the same mesh
 with different transforms using a single draw call.
 
 The system supports:
 - Loading OBJ + MTL files with PyWavefront
+- Creating terrain meshes using Perlin noise
 - Creating a persistent instance buffer per model
 - Resizing the buffer dynamically with orphan()
 - Dirty flagging to only update GPU buffers when needed
@@ -18,6 +19,7 @@ from contextlib import suppress
 import importlib.resources
 from pathlib import Path
 import imageio
+import noise
 import pywavefront
 import moderngl
 import moderngl_window as mglw
@@ -26,19 +28,82 @@ from pyglm import glm
 import random
 import math
 import weakref
-from typing import List, Dict
+from typing import List, Dict, Optional, Union, Any, Tuple
 
 from riverborn.camera import Camera
 from riverborn.shader import load_shader
+from riverborn.terrain import make_terrain, Mesh
 
 
-SUN_DIR = glm.normalize(glm.vec3(1, 1, 1))
+class Light:
+    """Directional light with shadow mapping capabilities.
 
+    Attributes:
+        direction: Direction of the light (will be normalized)
+        color: Color of the light
+        ambient: Ambient color of the light
+        position: Computed position based on direction and distance
+        view_matrix: Light's view matrix
+        proj_matrix: Light's projection matrix
+        light_space_matrix: Combined projection and view matrix
+    """
+    def __init__(self,
+                 direction: glm.vec3,
+                 color: glm.vec3 = glm.vec3(1.0),
+                 ambient: glm.vec3 = glm.vec3(0.1),
+                 distance: float = 100.0,
+                 ortho_size: float = 50.0,
+                 near: float = 1.0,
+                 far: float = 200.0,
+                 target: glm.vec3 = glm.vec3(0.0)):
+        """Initialize the light.
+
+        Args:
+            direction: Direction of the light
+            color: Color of the light
+            ambient: Ambient color in shadow areas
+            distance: Distance at which to place the light
+            ortho_size: Size of the orthographic projection box
+            near: Near plane distance
+            far: Far plane distance
+            target: Target point the light looks at (center of the shadow projection)
+        """
+        self.direction = glm.normalize(glm.vec3(direction))
+        self.color = glm.vec3(color)
+        self.ambient = glm.vec3(ambient)
+        self.distance = distance
+        self.ortho_size = ortho_size
+        self.near = near
+        self.far = far
+        self.target = glm.vec3(target)
+
+        self.update_matrices()
+
+    def update_matrices(self):
+        """Update view and projection matrices."""
+        # Position the light by moving in the opposite direction from the target
+        self.position = self.target - self.direction * self.distance
+
+        # Create view matrix looking from light position toward the target
+        self.view_matrix = glm.lookAt(
+            self.position,             # eye position
+            self.target,               # looking at target
+            glm.vec3(0.0, 1.0, 0.0)    # up vector
+        )
+
+        # Create orthographic projection matrix
+        size = self.ortho_size
+        self.proj_matrix = glm.ortho(
+            -size, size, -size, size, self.near, self.far
+        )
+
+        # Combined light space matrix
+        self.light_space_matrix = self.proj_matrix * self.view_matrix
 
 
 class Model:
     """
-    A 3D model loaded from an OBJ file with support for instanced rendering.
+    Base class for 3D models with support for instanced rendering.
 
     Attributes:
         ctx: ModernGL context
@@ -50,16 +115,13 @@ class Model:
         instance_count: Number of active instances
         instances_dirty: Flag indicating whether GPU buffer needs update
     """
-
     textures = {}
 
-    def __init__(self, mesh: pywavefront.Wavefront, ctx: moderngl.Context, program: moderngl.Program, capacity: int = 100) -> None:
+    def __init__(self, ctx: moderngl.Context, program: moderngl.Program, capacity: int = 100) -> None:
         """
-        Initialize the model by creating VAOs for each mesh part and reserving
-        space for per-instance data.
+        Initialize the model by creating instance buffers.
 
         Args:
-            mesh: PyWavefront mesh object
             ctx: ModernGL context
             program: Shader program to use
             capacity: Initial number of instances to support
@@ -73,42 +135,6 @@ class Model:
         self.instances_dirty = False
         self.instance_buffer = ctx.buffer(reserve=capacity * 16 * 4)
         self.instance_refs = weakref.WeakValueDictionary()
-
-        vertex_stride = 8
-        for mesh_name, mesh_obj in mesh.meshes.items():
-            for material in mesh_obj.materials:
-                assert material.vertex_format == 'T2F_N3F_V3F', \
-                    f"Unsupported vertex format: {material.vertex_format}"
-                vertices = np.array(material.vertices, dtype='f4')
-                vbo = ctx.buffer(vertices.tobytes())
-                if hasattr(material, 'texture'):
-                    path = Path(material.texture.path).name
-                    texture = {'texture': self.load_texture(path)}
-                else:
-                    texture = {}
-
-                if hasattr(material, 'faces') and material.faces:
-                    indices = np.array([i for face in material.faces for i in face], dtype='i4')
-                    ibo = ctx.buffer(indices.tobytes())
-                    vao = ctx.vertex_array(program, [
-                        (vbo, '2f 3f 3f', 'in_texcoord_0', 'in_normal', 'in_position'),
-                        (self.instance_buffer, '16f4/i', 'm_model')
-                    ], ibo)
-                    self.parts.append({
-                        "vbo": vbo, "ibo": ibo, "vao": vao, "indexed": True,
-                        **texture
-                    })
-                else:
-                    vao = ctx.vertex_array(program, [
-                        (vbo, '2f 3f 3f', 'in_texcoord_0', 'in_normal', 'in_position'),
-                        (self.instance_buffer, '16f4/i', 'm_model')
-                    ])
-                    self.parts.append({
-                        "vbo": vbo,
-                        "vao": vao,
-                        "indexed": False,
-                        **texture
-                    })
 
     def load_texture(self, path: str) -> moderngl.Texture:
         """Load and create a ModernGL texture from an image file."""
@@ -133,6 +159,14 @@ class Model:
         texture.filter = (moderngl.LINEAR, moderngl.LINEAR)
         texture.build_mipmaps()
         self.textures[path] = texture
+        return texture
+
+    def create_texture_from_array(self, data: np.ndarray) -> moderngl.Texture:
+        """Create a ModernGL texture from a numpy array."""
+        h, w, depth = data.shape
+        texture = self.ctx.texture((w, h), depth, data.tobytes())
+        texture.filter = (moderngl.LINEAR, moderngl.LINEAR)
+        texture.build_mipmaps()
         return texture
 
     def add_instance(self, matrix: glm.mat4, instance=None) -> int:
@@ -172,27 +206,28 @@ class Model:
         self.instance_matrices[index] = matrix
         self.instances_dirty = True
 
-    def draw(self, camera: Camera, sun_dir: glm.vec3) -> None:
+    def draw(self, camera: Camera, light: Light) -> None:
         """
         Render the model using instanced rendering.
 
         Args:
-            m_proj: Projection matrix
-            m_cam: Camera/view matrix
-            sun_dir: Direction of sunlight for lighting calculations
+            camera: Camera object
+            light: Light object for lighting calculations
         """
-        camera.bind(self.program)
-
-        with suppress(KeyError):
-            self.program['sun_dir'].value = tuple(sun_dir)
-
-        if True or self.instances_dirty:
+        if self.instances_dirty:
             self.instance_buffer.write(self.instance_matrices[:self.instance_count])
             self.instances_dirty = False
 
         for part in self.parts:
-            if texture := part.get('texture'):
-                texture.use(location=0)
+            self.program.bind(
+                m_proj=camera.get_proj_matrix(),
+                m_view=camera.get_view_matrix(),
+                light_dir=light.direction,
+                light_color=light.color,
+                ambient_color=light.ambient,
+                light_space_matrix=light.light_space_matrix,
+                **part['uniforms']
+            )
             part['vao'].render(instances=self.instance_count)
 
     def destroy(self) -> None:
@@ -206,6 +241,111 @@ class Model:
             part['vao'].release()
         self.instance_buffer.release()
         self.parts.clear()
+
+
+class WavefrontModel(Model):
+    """
+    A 3D model loaded from an OBJ file with support for instanced rendering.
+    """
+
+    def __init__(self, mesh: pywavefront.Wavefront, ctx: moderngl.Context, program: moderngl.Program, capacity: int = 100) -> None:
+        """
+        Initialize the model by creating VAOs for each mesh part and reserving
+        space for per-instance data.
+
+        Args:
+            mesh: PyWavefront mesh object
+            ctx: ModernGL context
+            program: Shader program to use
+            capacity: Initial number of instances to support
+        """
+        super().__init__(ctx, program, capacity)
+
+        for mesh_name, mesh_obj in mesh.meshes.items():
+            for material in mesh_obj.materials:
+                assert material.vertex_format == 'T2F_N3F_V3F', \
+                    f"Unsupported vertex format: {material.vertex_format}"
+                vertices = np.array(material.vertices, dtype='f4')
+                vbo = ctx.buffer(vertices.tobytes())
+                if hasattr(material, 'texture'):
+                    path = Path(material.texture.path).name
+                    uniforms = {
+                        'diffuse_tex': self.load_texture(path)
+                    }
+                else:
+                    uniforms = {}
+
+                if hasattr(material, 'faces') and material.faces:
+                    indices = np.array([i for face in material.faces for i in face], dtype='i4')
+                    ibo = ctx.buffer(indices.tobytes())
+                    vao = ctx.vertex_array(program, [
+                        (vbo, '2f 3f 3f', 'in_texcoord_0', 'in_normal', 'in_position'),
+                        (self.instance_buffer, '16f4/i', 'm_model')
+                    ], ibo)
+                    self.parts.append({
+                        "vbo": vbo, "ibo": ibo, "vao": vao, "indexed": True,
+                        'uniforms': uniforms
+                    })
+                else:
+                    vao = ctx.vertex_array(program, [
+                        (vbo, '2f 3f 3f', 'in_texcoord_0', 'in_normal', 'in_position'),
+                        (self.instance_buffer, '16f4/i', 'm_model')
+                    ])
+                    self.parts.append({
+                        "vbo": vbo,
+                        "vao": vao,
+                        "indexed": False,
+                        'uniforms': uniforms
+                    })
+
+
+class TerrainModel(Model):
+    """
+    A 3D model created from a terrain mesh with support for instanced rendering.
+    """
+
+    def __init__(self, mesh: Mesh, ctx: moderngl.Context, program: moderngl.Program,
+                 texture: Optional[Union[moderngl.Texture, np.ndarray]] = None,
+                 capacity: int = 1) -> None:
+        """
+        Initialize the model from a terrain mesh.
+
+        Args:
+            mesh: Terrain mesh object
+            ctx: ModernGL context
+            program: Shader program to use
+            texture: Texture or numpy array to use for the terrain
+            capacity: Initial number of instances to support
+        """
+        super().__init__(ctx, program, capacity)
+
+        # Create the VBO
+        vbo = ctx.buffer(mesh.vertices.tobytes())
+
+        # Create the IBO
+        ibo = ctx.buffer(mesh.indices.astype("i4").tobytes())
+
+        # Process texture if provided
+        uniforms = {}
+        if isinstance(texture, moderngl.Texture):
+            uniforms = {'diffuse_tex': texture}
+        elif isinstance(texture, np.ndarray):
+            uniforms = {'diffuse_tex': self.create_texture_from_array(texture)}
+
+        # Create the VAO
+        vao = ctx.vertex_array(program, [
+            (vbo, '3f 3f 2f', 'in_position', 'in_normal', 'in_texcoord_0'),
+            (self.instance_buffer, '16f4/i', 'm_model')
+        ], ibo)
+
+        # Add the part
+        self.parts.append({
+            "vbo": vbo,
+            "ibo": ibo,
+            "vao": vao,
+            "indexed": True,
+            "uniforms": uniforms,
+        })
 
 
 class Instance:
@@ -340,6 +480,7 @@ class Instance:
         self._deleted = True
 
 
+
 class Scene:
     """
     A simple container for models and their instances.
@@ -351,7 +492,7 @@ class Scene:
         self.models: Dict[str, Model] = {}
         self.instances: List[Instance] = []
 
-    def load(self, filename: str, program: moderngl.Program, capacity: int = 100) -> Model:
+    def load_wavefront(self, filename: str, program: moderngl.Program, capacity: int = 100) -> WavefrontModel:
         """
         Load an OBJ model from the assets package and create its VAO and buffers.
 
@@ -361,13 +502,38 @@ class Scene:
             capacity: Initial instance capacity
 
         Returns:
-            The loaded Model
+            The loaded WavefrontModel
         """
-        files = importlib.resources.files()
+        files = importlib.resources.files('riverborn')
         with importlib.resources.as_file(files / f'models/{filename}') as model_path:
             mesh = pywavefront.Wavefront(str(model_path), create_materials=True, collect_faces=True)
-        model = Model(mesh, self.ctx, program, capacity)
+        model = WavefrontModel(mesh, self.ctx, program, capacity)
         self.models[filename] = model
+        return model
+
+    def create_terrain(self, name: str, program: moderngl.Program,
+                      segments: int, width: float, depth: float,
+                      height: float, noise_scale: float,
+                      texture: Optional[Union[moderngl.Texture, np.ndarray]] = None) -> TerrainModel:
+        """
+        Create a terrain model and add it to the scene.
+
+        Args:
+            name: Name to identify the terrain model
+            program: Shader program to use
+            segments: Number of grid segments
+            width: Width of the terrain
+            depth: Depth of the terrain
+            height: Height multiplier for the terrain
+            noise_scale: Scale of the noise function for terrain generation
+            texture: Optional texture for the terrain
+
+        Returns:
+            The created TerrainModel
+        """
+        terrain_mesh = make_terrain(segments, width, depth, height, noise_scale)
+        model = TerrainModel(terrain_mesh, self.ctx, program, texture)
+        self.models[name] = model
         return model
 
     def add(self, model: Model) -> Instance:
@@ -384,18 +550,16 @@ class Scene:
         self.instances.append(inst)
         return inst
 
-    def draw(self, camera: Camera, sun_dir: glm.vec3) -> None:
+    def draw(self, camera: Camera, light: Light) -> None:
         """
-        Draw all instances of a given model.
+        Draw all models with their instances in the scene.
 
         Args:
-            model_filename: Filename of the model as loaded via `load()`
-            m_proj: Projection matrix
-            m_cam: Camera/view matrix
+            camera: Camera object with view and projection matrices
             sun_dir: Directional light vector
         """
         for model in self.models.values():
-            model.draw(camera, sun_dir)
+            model.draw(camera, light)
 
     def destroy(self) -> None:
         """
@@ -405,6 +569,31 @@ class Scene:
             model.destroy()
         self.models.clear()
         self.instances.clear()
+
+
+# Create a noise texture for terrain
+def create_noise_texture(size: int = 256, color=(1.0, 1.0, 1.0)) -> np.ndarray:
+    """Generate a texture with Perlin noise."""
+    tex_width, tex_height = size, size
+    texture_data = np.zeros((tex_height, tex_width, 3), dtype=np.uint8)
+    texture_noise_scale = 0.05
+    for i in range(tex_height):
+        for j in range(tex_width):
+            t = noise.pnoise2(
+                j * texture_noise_scale,
+                i * texture_noise_scale,
+                octaves=4,
+                persistence=0.5,
+                lacunarity=2.0,
+                repeatx=1024,
+                repeaty=1024,
+                base=24,
+            )
+            c = (t + 1) * 0.5
+            texture_data[i, j] = tuple(int(c * comp * 255) for comp in color)
+    # Flip vertically to account for texture coordinate differences.
+    texture_data = np.flipud(texture_data)
+    return texture_data
 
 
 SUN_DIR = glm.normalize(glm.vec3(1, 1, 1))
@@ -420,11 +609,28 @@ class SceneDemo(mglw.WindowConfig):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # Create a shader program for the model.
-        prog: moderngl.Program = load_shader('texture_alpha')
+        plant_shader = load_shader('texture_alpha')
+        terrain_shader = load_shader('diffuse')
 
         self.scene = Scene()
-        plant: Model = self.scene.load('fern.obj', prog, capacity=100)
 
+        # Load a plant model
+        plant: WavefrontModel = self.scene.load_wavefront('fern.obj', plant_shader, capacity=100)
+
+        # Create a terrain model
+        terrain_texture = create_noise_texture(size=512, color=(0.6, 0.5, 0.4))
+        terrain: TerrainModel = self.scene.create_terrain(
+            'terrain',
+            terrain_shader,
+            segments=100,
+            width=100,
+            depth=100,
+            height=10,
+            noise_scale=0.1,
+            texture=terrain_texture
+        )
+
+        # Initialize camera
         self.camera = Camera(
             eye=[0.0, 20.0, 50.0],
             target=[0.0, 0.0, 0.0],
@@ -437,6 +643,12 @@ class SceneDemo(mglw.WindowConfig):
         self.camera.set_aspect(self.wnd.aspect_ratio)
         self.camera.look_at(glm.vec3(0, 0, 0))
 
+        # Create terrain instance
+        terrain_inst = self.scene.add(terrain)
+        terrain_inst.pos = (0, -5, 0)
+        terrain_inst.update()
+
+        # Create plant instances scattered over the terrain
         for _ in range(200):
             inst: Instance = self.scene.add(plant)
             inst.pos = (random.uniform(-100, 100), 1, random.uniform(-100, 100))
@@ -446,15 +658,14 @@ class SceneDemo(mglw.WindowConfig):
 
     def on_render(self, time, frame_time):
         self.ctx.clear(0.5, 0.55, 0.7, 1.0)
-        # Draw the plant model with all its instances.
+        self.ctx.enable(moderngl.DEPTH_TEST)
+        # Draw all models with their instances
         self.scene.draw(self.camera, SUN_DIR)
 
     def on_close(self):
         self.scene.destroy()
 
-
     def on_key_event(self, key, action, modifiers):
-
         op = 'press' if action == self.wnd.keys.ACTION_PRESS else 'release'
         keys = self.wnd.keys
         match op, key, modifiers.shift:
@@ -467,4 +678,5 @@ class SceneDemo(mglw.WindowConfig):
 
 
 def main():
+    import sys
     mglw.run_window_config(SceneDemo)

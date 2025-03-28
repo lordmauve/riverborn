@@ -1,17 +1,18 @@
+"""Heightfield module for generating and displaying procedural terrain."""
 import moderngl
 import moderngl_window as mglw
 import numpy as np
 import noise
 from pyglm import glm
 
-from . import terrain
+from .terrain import make_terrain
 from .shader import load_shader
 from .camera import Camera
+from .scene import Light, Scene, TerrainModel
 
 
 def create_noise_texture(size: int = 256, color=(1.0, 1.0, 1.0)):
-    """Generate a 256x256 texture with Perlin noise."""
-    ctx = mglw.ctx()
+    """Generate a texture with Perlin noise."""
     tex_width, tex_height = size, size
     texture_data = np.zeros((tex_height, tex_width, 3), dtype=np.uint8)
     texture_noise_scale = 0.05
@@ -31,15 +32,11 @@ def create_noise_texture(size: int = 256, color=(1.0, 1.0, 1.0)):
             texture_data[i, j] = tuple(int(c * comp * 255) for comp in color)
     # Flip vertically to account for texture coordinate differences.
     texture_data = np.flipud(texture_data)
-    texture = ctx.texture(
-        (tex_width, tex_height), 3, texture_data.tobytes()
-    )
-    texture.build_mipmaps()
-    texture.use(location=0)
-    return texture
+    return texture_data
 
 
 class HeightfieldApp(mglw.WindowConfig):
+    """Demo application for displaying a heightfield using the Scene framework."""
     gl_version = (3, 3)
     title = "Textured Heightfield with ModernGL"
     window_size = (800, 600)
@@ -48,13 +45,41 @@ class HeightfieldApp(mglw.WindowConfig):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        self.instance = Instance(
-            terrain.make_terrain(100, 100, 100, 10, 0.1),
-            load_shader('diffuse'),
-            create_noise_texture(color=(0.6, 0.5, 0.4))
+        # Initialize scene
+        self.scene = Scene()
+
+        self.light = Light(
+            direction=[0.5, -0.8, -0.3],
+            color=[1.0, 1.0, 1.0],
+            ambient=[0.2, 0.2, 0.2],
+            ortho_size=60.0,
+            near=1.0,
+            far=200.0,
+            target=glm.vec3(0.0, 0.0, 0.0)
         )
 
-        # Create the camera.
+        # Create a shader program for the terrain
+        terrain_shader = load_shader('diffuse', defines={'INSTANCED': '1'})
+
+        # Generate terrain texture
+        terrain_texture = create_noise_texture(size=512, color=(0.6, 0.5, 0.4))
+
+        # Create a terrain model and add it to the scene
+        terrain_model = self.scene.create_terrain(
+            'terrain',
+            terrain_shader,
+            segments=100,
+            width=100,
+            depth=100,
+            height=10,
+            noise_scale=0.1,
+            texture=terrain_texture
+        )
+
+        # Create an instance of the terrain model
+        self.terrain_instance = self.scene.add(terrain_model)
+
+        # Create the camera
         self.camera = Camera(
             eye=[0.0, 50.0, 100.0],
             target=[0.0, 0.0, 0.0],
@@ -72,61 +97,20 @@ class HeightfieldApp(mglw.WindowConfig):
         self.ctx.enable(moderngl.DEPTH_TEST)
 
         self.time += frame_time
-        self.instance.rotation = glm.quat(
+
+        # Update terrain rotation
+        self.terrain_instance.rot = glm.quat(
             glm.vec3(0.0, self.time, 0.0)
         )
 
-        # Update camera aspect if needed.
+        # Update camera aspect if needed
         self.camera.set_aspect(self.wnd.aspect_ratio)
-        self.instance.render(self.camera)
 
+        # Draw the scene
+        self.scene.draw(self.camera, self.light)
 
-class Instance:
-    vao: moderngl.VertexArray
-    prog: moderngl.Program
-    texture: moderngl.Texture
-
-    def __init__(self,
-        mesh: terrain.Mesh,
-        shader: moderngl.Program,
-        texture: moderngl.Texture
-    ) -> None:
-        self.pos = glm.vec3(0.0, 0.0, 0.0)
-        self.rotation = glm.quat()
-        self.ctx = mglw.ctx()
-        self.mesh = mesh
-        self.prog = shader
-               # Create buffers: vertex buffer and index buffer.
-        self.vbo = self.ctx.buffer(mesh.vertices)
-        self.ibo = self.ctx.buffer(mesh.indices.astype("i4").tobytes())
-
-        # Create the vertex array object linking attributes.
-        self.vao = self.ctx.vertex_array(
-            self.prog,
-            [(self.vbo, "3f 3f 2f", "in_position", "in_normal", "in_texcoord_0")],
-            self.ibo,
-        )
-
-        # Create the texture (generated via Perlin noise).
-        self.texture = texture
-
-    @property
-    def matrix(self) -> glm.mat4:
-        return glm.translate(glm.mat4(self.rotation), self.pos)
-
-    def render(self, camera: Camera):
-        self.texture.use(location=0)
-        self.prog["Texture"] = 0
-        self.prog["light_dir"].value = (0.5, 1.0, 0.3)
-        self.prog["light_color"].value = (1.0, 1.0, 1.0)
-        self.prog["ambient_color"].value = (0.3, 0.3, 0.3)
-
-        self.prog['m_model'].write(self.matrix)
-
-        # Bind the camera matrices (MVP and normal matrix) to the shader.
-        camera.bind(self.prog)
-
-        self.vao.render()
+    def on_close(self):
+        self.scene.destroy()
 
 
 def main():
