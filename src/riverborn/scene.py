@@ -154,7 +154,7 @@ class Model:
         self.instance_matrices = array.zeros(capacity, glm.mat4)
         self.instances_dirty = False
         self.instance_buffer = ctx.buffer(reserve=capacity * 16 * 4)
-        self.instance_refs = weakref.WeakValueDictionary()
+        self.instance_refs: weakref.WeakValueDictionary[int, Instance] = weakref.WeakValueDictionary()
         self.material = material or Material()
 
     def load_texture(self, path: str) -> moderngl.Texture:
@@ -314,9 +314,8 @@ class Model:
                     })
 
             # Create a new vao if program changed
-            vao = None
             current_vao = part.get('vao')
-            if current_vao and hasattr(current_vao, 'program') and current_vao.program != shader:
+            if not current_vao or (hasattr(current_vao, 'program') and current_vao.program != shader):
                 # Programs differ, need to recreate VAO
                 if part.get('indexed', False):
                     vao = self.ctx.vertex_array(
@@ -378,6 +377,8 @@ class WavefrontModel(Model):
 
         for mesh_name, mesh_obj in mesh.meshes.items():
             for material in mesh_obj.materials:
+                if not material:
+                    continue
                 assert material.vertex_format == 'T2F_N3F_V3F', \
                     f"Unsupported vertex format: {material.vertex_format}"
                 vertices = np.array(material.vertices, dtype='f4')
@@ -579,8 +580,7 @@ class Instance:
         last_index = self.model.instance_count - 1
         if self.index != last_index:
             # Get the instance that uses the last slot
-            last_instance_ref = self.model.instance_refs.get(last_index)
-            last_instance = last_instance_ref() if last_instance_ref else None
+            last_instance = self.model.instance_refs.get(last_index)
 
             if last_instance:
                 # Update its index to point to the slot we're removing
@@ -800,5 +800,4 @@ def create_noise_texture(size: int = 256, color=(1.0, 1.0, 1.0)) -> np.ndarray:
             c = (t + 1) * 0.5
             texture_data[i, j] = tuple(int(c * comp * 255) for comp in color)
     # Flip vertically to account for texture coordinate differences.
-    texture_data = np.flipud(texture_data)
-    return texture_data
+    return np.flipud(texture_data)

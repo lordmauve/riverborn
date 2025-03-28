@@ -153,6 +153,7 @@ class ShadowSystem:
                 # We need to ignore the normal data because the shader doesn't
                 # use it for depth rendering, so the vertex format must contain
                 # "3x4" to ignore it
+                attrs: tuple[str, ...]
                 if isinstance(model, WavefrontModel):
                     vertex_format = '2f 3x4 3f'  # texcoord, normal, position
                     attrs = 'in_texcoord_0', 'in_position'

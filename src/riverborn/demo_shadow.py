@@ -91,7 +91,7 @@ class ShadowMappingDemo(mglw.WindowConfig):
         for _ in range(20):
             inst = self.scene.add(self.plant_model)
             # Random position on the terrain
-            inst.pos = (random.uniform(-20, 20), 0, random.uniform(-20, 20))
+            inst.pos = glm.vec3(random.uniform(-20, 20), 0, random.uniform(-20, 20))
             inst.rotate(random.uniform(0, 2 * math.pi), glm.vec3(0, 1, 0))
             inst.scale = glm.vec3(random.uniform(0.05, 0.1))
             inst.update()
