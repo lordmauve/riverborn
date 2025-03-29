@@ -174,16 +174,37 @@ class WaterApp(mglw.WindowConfig):
             alpha_test=True
         )
 
-        # Load a fern model with appropriate material properties
-        self.plant_model = self.scene.load_wavefront('fern.obj', material=plant_material, capacity=50)
+        little_plants = [
+            "plant01_t.obj",
+            "plant02_t.obj",
+            "plant03_t.obj",
+            "plant04_t.obj",
+            "plant05_t.obj",
+            "plant06_t.obj",
+            "plant07_t.obj",
+            "plant08_t.obj",
+            "plant09_t.obj",
+            "plant10_t.obj",
+            "plant11_t.obj",
+            "plant12_t.obj",
+        ]
+        big_plants = [
+            "fern.obj",
+            "plant13.obj",
+            "plant15.obj",
+            "plant16.obj",
+        ]
 
-        # Create plant instances
-        rng = random.Random(42)
+        # Load a fern model with appropriate material properties
+        self.plant_models = [
+            self.scene.load_wavefront(fname, material=plant_material, capacity=50)
+            for fname in big_plants + little_plants
+        ]
 
         # Plant distribution parameters
         terrain_width = 200   # Width of terrain in world units
         terrain_depth = 200   # Depth of terrain in world units
-        plant_spacing = 5    # Distance between plants
+        plant_spacing = 3    # Distance between plants
         water_level = 1.0     # Y position of water surface
 
         # Store plant instances for future updates
@@ -200,6 +221,7 @@ class WaterApp(mglw.WindowConfig):
         for i in range(-grid_size_x//2, grid_size_x//2):
             for j in range(-grid_size_z//2, grid_size_z//2):
                 # Calculate world position with random offset
+                rng = random.Random(i + 123907 * j)
                 world_x = i * plant_spacing + rng.uniform(-plant_spacing/4, plant_spacing/4)
                 world_z = j * plant_spacing + rng.uniform(-plant_spacing/4, plant_spacing/4)
 
@@ -238,7 +260,7 @@ class WaterApp(mglw.WindowConfig):
                     # Skip if below water level
                     continue
 
-                inst = self.scene.add(self.plant_model)
+                inst = self.scene.add(rng.choice(self.plant_models))
                 # Random position on the terrain
                 inst.pos = plant_pos
                 inst.rotate(rng.uniform(0, 2 * math.pi), glm.vec3(0, 1, 0))
