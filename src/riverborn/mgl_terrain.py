@@ -272,9 +272,9 @@ class WaterApp(mglw.WindowConfig):
     def paddle(self, side: float) -> None:
         """Paddle in the water."""
         async def paddle():
-            await clock.default_clock.animate(self.oar, 'accel_decel', 0.3, local_pos=glm.vec3(-side, 0, 1))
+            await clock.default_clock.animate(self.oar, 'accel_decel', 0.3, local_pos=glm.vec3(-0.8 * side, 0, 1))
 
-            speed = glm.vec3(0, -0.4, -2)
+            speed = glm.vec3(-0.1 * side, -0.4, -1.5)
 
             async for dt in clock.coro.frames_dt(seconds=1):
                 self.oar.local_pos += dt * speed
@@ -304,7 +304,7 @@ class WaterApp(mglw.WindowConfig):
         self.camera.look_at(self.canoe.pos)
 
     def update_canoe(self, dt):
-        self.canoe_vel *= 0.9 ** dt
+        self.canoe_vel *= 0.8 ** dt
         current_height = self.terrain_instance.model.mesh.get_terrain_height(
             self.canoe_pos
         )
