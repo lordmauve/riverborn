@@ -112,11 +112,12 @@ def tick_loop(dt: float) -> None:
 
 
 class SplashScreen:
-    def __init__(self, ctx):
+    def __init__(self, ctx, app):
         self.ctx = ctx
         self.active = True
         self.opacity = 1.0
         self.fading = False
+        self.app = app
 
         # Load the logo texture
         logo_path = importlib.resources.files('riverborn') / "textures/riverborn.png"
@@ -201,6 +202,14 @@ class SplashScreen:
             async def fade():
                 await clock.default_clock.animate(self, 'accel_decel', 1.0, opacity=0.0)
                 self.active = False
+                self.app.voiceover('start')
+                await clock.default_clock.coro.sleep(60)
+                self.app.voiceover('2min')
+                await clock.default_clock.coro.sleep(60)
+                self.app.voiceover('1min')
+                await clock.default_clock.coro.sleep(60)
+                if len(self.app.spotted_animals) < 3:
+                    self.app.voiceover('failed')
 
             loop.do(fade())
 
@@ -244,7 +253,7 @@ class WaterApp(mglw.WindowConfig):
         self.tool = TOOLS[self.tool_id](self)
 
         # Create splash screen
-        self.splash_screen = SplashScreen(self.ctx)
+        self.splash_screen = SplashScreen(self.ctx, self)
 
         # Create the scene
         self.scene = Scene()
@@ -332,7 +341,7 @@ class WaterApp(mglw.WindowConfig):
         self.oar = self.scene.add(oar_model)
         self.oar.local_pos = glm.vec3(0, 0, -1)
         self.oar.local_rot = glm.quat()
-        files = importlib.resources.files()
+        files = self.files = importlib.resources.files()
         with (files / 'sounds/splash2.wav').open('rb') as f:
             self.paddle_sound = pyglet.media.load('splash2.wav', f, streaming=False)
 
@@ -341,6 +350,9 @@ class WaterApp(mglw.WindowConfig):
 
         self.animals = Animals(self.scene)
         self.animals.load()
+
+        # Track which animals have been spotted
+        self.spotted_animals = set()
 
         # Water plane geometry: a quad covering the same region.
         self.water_size = 100.0
@@ -382,6 +394,10 @@ class WaterApp(mglw.WindowConfig):
         self.copy_vao = geometry.quad_fs(normals=False)
 
         self.on_resize(*self.wnd.size)
+
+    def voiceover(self, name):
+        with (self.files / f'sounds/{name}.wav').open('rb') as f:
+            pyglet.media.load(f'{name}.wav', f, streaming=False).play()
 
     canoe_pos = vec2(-80, -80)
     canoe_rot = 0
@@ -426,6 +442,52 @@ class WaterApp(mglw.WindowConfig):
 
         self.camera.eye = self.canoe.pos + glm.vec3(0, 15, -20)
         self.camera.look_at(self.canoe.pos)
+
+        # Check for nearby animals that haven't been spotted yet
+        self.check_nearby_animals()
+
+    def check_nearby_animals(self) -> None:
+        """Check if there are any unspotted animals nearby."""
+        # Detection range
+        detection_range = 12.0
+
+        # Get canoe position as a 2D point (x, z)
+        canoe_pos_2d = (self.canoe.pos.x, self.canoe.pos.z)
+
+        # Check each animal type and its instances
+        for animal_type, instances in self.animals.animals.items():
+            # Skip if we've already spotted this type
+            if animal_type in self.spotted_animals:
+                continue
+
+            # Check each instance of this animal type
+            for instance in instances:
+                # Get animal position as a 2D point (x, z)
+                animal_pos_2d = (instance.pos.x, instance.pos.z)
+
+                # Calculate distance (in 2D, ignoring y-axis)
+                dx = canoe_pos_2d[0] - animal_pos_2d[0]
+                dz = canoe_pos_2d[1] - animal_pos_2d[1]
+                distance = math.sqrt(dx*dx + dz*dz)
+
+                # If within range, mark as spotted and call the event handler
+                if distance <= detection_range:
+                    self.spotted_animals.add(animal_type)
+                    loop.do(self.on_animal_spotted(animal_type))
+                    break  # No need to check other instances of this type
+
+    async def on_animal_spotted(self, animal_type: str) -> None:
+        """Called when the player sees a new animal type for the first time."""
+        print(f"Spotted a {animal_type} for the first time!")
+        self.voiceover(animal_type)
+        if len(self.spotted_animals) == 3:
+            await clock.default_clock.coro.sleep(3)
+            self.voiceover('win')
+
+        # You can add more visual/audio feedback here, like:
+        # - Display a notification
+        # - Play a discovery sound
+        # - Update a journal or achievement system
 
     def update_canoe(self, dt):
         self.canoe_vel *= 0.8 ** dt
