@@ -1,6 +1,8 @@
+import math
 import typing
 
 import numpy as np
+from pyglm import glm
 
 from .terrain import recompute_normals
 
@@ -171,3 +173,63 @@ class SmoothTool:
 
     def on_mouse_release_event(self, x, y, button):
         self.last_mouse = None
+
+
+@register_tool
+class AnimalPlacementTool:
+    """Place and rotate animals using mouse input.
+
+    Left-click to start placement.
+    Drag to set the rotation (angle is computed from the drag vector).
+    Release to place the animal.
+    Scroll to toggle animal type.
+    """
+    def __init__(self, app: 'WaterApp'):
+        from .animals import ANIMAL_Y  # Import to access available animal types
+        self.app = app
+        self.press_pos: tuple[float, float] | None = None
+        self.current_rotation: float = 0.0
+        self.animal_types = list(ANIMAL_Y.keys())
+        self.current_index = 0
+        self.animal_type = self.animal_types[self.current_index]
+
+    def update(self, dt):
+        pass
+
+    def on_mouse_press_event(self, x, y, button):
+        pos = self.app.screen_to_ground(x, y)
+        if pos is not None:
+            self.press_pos = pos
+            self.animal = self.app.animals.add(self.animal_type, self.press_pos, self.current_rotation)
+
+    def on_mouse_drag_event(self, x, y, dx, dy):
+        if self.press_pos is None:
+            return
+        cur_pos = self.app.screen_to_ground(x, y)
+        if cur_pos is None:
+            return
+        d = cur_pos - self.press_pos
+        angle = math.atan2(d.x, d.z)
+        self.animal.rot = glm.quat(glm.angleAxis(angle, glm.vec3(0, 1, 0)))
+
+    def on_mouse_release_event(self, x, y, button):
+        if self.press_pos is None:
+            return
+        release_pos = self.app.screen_to_ground(x, y)
+        if release_pos is None:
+            release_pos = self.press_pos
+
+        d = release_pos - self.press_pos
+        angle = math.atan2(d.x, d.z)
+        self.animal.rot = glm.quat(glm.angleAxis(angle, glm.vec3(0, 1, 0)))
+        self.animal = None
+        self.press_pos = None
+
+    def on_mouse_scroll_event(self, x_offset: float, y_offset: float):
+        # Scroll up toggles forward; scroll down toggles backward.
+        if y_offset > 0:
+            self.current_index = (self.current_index + 1) % len(self.animal_types)
+        elif y_offset < 0:
+            self.current_index = (self.current_index - 1) % len(self.animal_types)
+        self.animal_type = self.animal_types[self.current_index]
+        print(f"Animal selected: {self.animal_type}")

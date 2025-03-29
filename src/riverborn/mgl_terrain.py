@@ -2,6 +2,7 @@ import atexit
 import heapq
 import importlib.resources
 from itertools import product
+import json
 import math
 from pathlib import Path
 import random
@@ -26,7 +27,7 @@ from .scene import Light, Material, Scene
 from .shader import load_shader
 from .ripples import WaterSimulation
 from .heightfield import create_noise_texture
-
+from .animals import Animals
 
 # Helper: create a simple quad geometry with positions (3f) and UV coordinates (2f)
 def create_quad(size):
@@ -186,6 +187,7 @@ class WaterApp(mglw.WindowConfig):
             # Save the terrain model to a file
             with terrain_path.open('wb') as f:
                 np.save(f, terrain_model.mesh.heights, allow_pickle=False)
+            self.animals.save()
 
         # Create an instance of the terrain model
         self.terrain_instance = self.scene.add(terrain_model)
@@ -204,20 +206,15 @@ class WaterApp(mglw.WindowConfig):
 
         canoe_model = self.scene.load_wavefront('boat.obj', material=default_material, capacity=1)
         self.canoe = self.scene.add(canoe_model)
-        self.canoe.pos = glm.vec3(0, 0, 0)
+        self.canoe.pos = glm.vec3(-100, 0, -100)
 
         oar_model = self.scene.load_wavefront('oar.obj', material=default_material, capacity=1)
         self.oar = self.scene.add(oar_model)
         self.oar.local_pos = glm.vec3(0, 0, -1)
         self.oar.local_rot = glm.quat()
 
-        # croc = self.scene.add(self.scene.load_wavefront('crocodile.obj', material=default_material, capacity=1))
-        # croc.pos = glm.vec3(0, 1.0, 5)
-        # self.hippo = self.scene.add(self.scene.load_wavefront('hippopotamus.obj', material=default_material, capacity=1))
-        # self.hippo.pos = glm.vec3(-3, 0, 5)
-        self.flamingo = self.scene.add(self.scene.load_wavefront('flamingo.obj', material=default_material, capacity=1))
-        self.flamingo.pos = glm.vec3(3, 1, 5)
-        self.flamingo.rot = glm.quat(glm.angleAxis(math.pi * 0.75, glm.vec3(0, 1, 0)))
+        self.animals = Animals(self.scene)
+        self.animals.load()
 
         # Water plane geometry: a quad covering the same region.
         self.water_size = 100.0
@@ -260,7 +257,7 @@ class WaterApp(mglw.WindowConfig):
 
         self.on_resize(*self.wnd.size)
 
-    canoe_pos = vec2(0, 0)
+    canoe_pos = vec2(-80, -80)
     canoe_rot = 0
     canoe_vel = vec2(0, 0)
     canoe_angular_vel = 0
@@ -425,6 +422,10 @@ class WaterApp(mglw.WindowConfig):
     def screen_to_water(self, x: float, y: float) -> tuple[float, float] | None:
         intersection = self.screen_to_ground(x, y)
         return intersection and self.pos_to_water(intersection)
+
+    def on_mouse_scroll_event(self, x_offset: float, y_offset: float):
+        if handler := getattr(self.tool, 'on_mouse_scroll_event', None):
+            handler(x_offset, y_offset)
 
     def on_mouse_drag_event(self, x, y, dx, dy):
         self.tool.on_mouse_drag_event(x, y, dx, dy)
