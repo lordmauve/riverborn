@@ -1,0 +1,12 @@
+# Blender MTL File: 'croc2.blend'
+# Material Count: 1
+
+newmtl Material
+Ns 192.581607
+Ka 0.488372 0.488372 0.488372
+Kd 0.096595 0.106535 0.005927
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 3

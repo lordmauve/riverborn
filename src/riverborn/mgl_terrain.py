@@ -193,7 +193,7 @@ class WaterApp(mglw.WindowConfig):
         self.plants = PlantGrid(self.scene, terrain_model.mesh)
         self.plants.setup()
 
-        canoe_material = Material(
+        default_material = Material(
             double_sided=False,
             translucent=False,
             transmissivity=0.0,
@@ -202,14 +202,22 @@ class WaterApp(mglw.WindowConfig):
             alpha_test=False,
         )
 
-        canoe_model = self.scene.load_wavefront('boat.obj', material=canoe_material, capacity=1)
+        canoe_model = self.scene.load_wavefront('boat.obj', material=default_material, capacity=1)
         self.canoe = self.scene.add(canoe_model)
         self.canoe.pos = glm.vec3(0, 0, 0)
 
-        oar_model = self.scene.load_wavefront('oar.obj', material=canoe_material, capacity=1)
+        oar_model = self.scene.load_wavefront('oar.obj', material=default_material, capacity=1)
         self.oar = self.scene.add(oar_model)
         self.oar.local_pos = glm.vec3(0, 0, -1)
         self.oar.local_rot = glm.quat()
+
+        # croc = self.scene.add(self.scene.load_wavefront('crocodile.obj', material=default_material, capacity=1))
+        # croc.pos = glm.vec3(0, 1.0, 5)
+        # self.hippo = self.scene.add(self.scene.load_wavefront('hippopotamus.obj', material=default_material, capacity=1))
+        # self.hippo.pos = glm.vec3(-3, 0, 5)
+        self.flamingo = self.scene.add(self.scene.load_wavefront('flamingo.obj', material=default_material, capacity=1))
+        self.flamingo.pos = glm.vec3(3, 1, 5)
+        self.flamingo.rot = glm.quat(glm.angleAxis(math.pi * 0.75, glm.vec3(0, 1, 0)))
 
         # Water plane geometry: a quad covering the same region.
         self.water_size = 100.0
