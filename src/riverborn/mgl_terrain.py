@@ -16,6 +16,7 @@ import imageio as iio
 from wasabigeom import vec2
 from wasabi2d import loop, clock
 from pyglm import glm
+import pyglet.media
 
 from riverborn.shadow_debug import render_small_shadow_map
 
@@ -212,6 +213,12 @@ class WaterApp(mglw.WindowConfig):
         self.oar = self.scene.add(oar_model)
         self.oar.local_pos = glm.vec3(0, 0, -1)
         self.oar.local_rot = glm.quat()
+        files = importlib.resources.files()
+        with (files / 'sounds/splash2.wav').open('rb') as f:
+            self.paddle_sound = pyglet.media.load('splash2.wav', f, streaming=False)
+
+        self.music = (files / 'sounds/ambient.ogg').open('rb')
+        pyglet.media.load('ambient', self.music, streaming=True).play()
 
         self.animals = Animals(self.scene)
         self.animals.load()
@@ -272,6 +279,7 @@ class WaterApp(mglw.WindowConfig):
             await clock.default_clock.animate(self.oar, 'accel_decel', 0.3, local_pos=glm.vec3(-0.8 * side, 0, 1))
 
             speed = glm.vec3(-0.1 * side, -0.4, -1.5)
+            self.paddle_sound.play()
 
             async for dt in clock.coro.frames_dt(seconds=1):
                 self.oar.local_pos += dt * speed
