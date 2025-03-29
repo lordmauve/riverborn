@@ -429,10 +429,10 @@ class WavefrontModel(Model):
                 # Create uniforms dictionary for textures if present
                 uniforms = {}
                 uniforms['diffuse_color'] = obj_material.diffuse
+                uniforms['specular_exponent'] = obj_material.shininess
+                uniforms['specular_color'] = obj_material.specular[:3]
                 if obj_material.texture and 'in_texcoord_0' in vbotype:
-                    uniforms = {
-                        'diffuse_tex': self.load_texture(Path(obj_material.texture.path).name),
-                    }
+                    uniforms['diffuse_tex'] = self.load_texture(Path(obj_material.texture.path).name)
                 else:
                     vbotype = subformat(vbotype, normal=True)
 
@@ -487,11 +487,14 @@ class TerrainModel(Model):
         ibo = ctx.buffer(mesh.indices.astype("i4").tobytes())
 
         # Process texture if provided
-        uniforms = {}
+        uniforms = {
+            'specular_exponent': 3,
+            'specular_color': (0.3, 0.3, 0.3),
+        }
         if isinstance(texture, moderngl.Texture):
-            uniforms = {'diffuse_tex': texture}
+            uniforms['diffuse_tex'] = texture
         elif isinstance(texture, np.ndarray):
-            uniforms = {'diffuse_tex': self.create_texture_from_array(texture)}
+            uniforms['diffuse_tex'] = self.create_texture_from_array(texture)
 
         vbotype = ('3f 3f 2f', 'in_position', 'in_normal', 'in_texcoord_0')
         self.part = Part(
@@ -500,7 +503,7 @@ class TerrainModel(Model):
             indexed=True,
             vbotype=vbotype,
             uniforms=uniforms,
-            depth_uniforms=uniforms if material.alpha_test else {},
+            depth_uniforms={'diffuse_tex': uniforms['diffuse_tex']} if material.alpha_test else {},
             vao_args=[(vbo, *vbotype),
                       (self.instance_buffer, '16f4/i', 'm_model')]
         )

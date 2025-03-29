@@ -16,6 +16,8 @@ uniform vec3 light_dir;
 uniform vec3 light_color;
 uniform vec3 ambient_color;
 uniform vec3 camera_pos;
+uniform float specular_exponent;
+uniform vec3 specular_color = vec3(1.0, 1.0, 1.0);  // Color of the specular highlight
 const vec3 transmissivity = vec3(0.2, 0.2, 0.2);  // How much light passes through the surface
 
 uniform float shadow_bias = 0.001;
@@ -67,8 +69,8 @@ void main() {
 
     // Specular (optional)
     vec3 reflect_dir = reflect(-light, normal);
-    float spec = pow(max(dot(view_dir, reflect_dir), 0.0), 16.0);
-    vec3 specular = 0.4 * spec * light_color;
+    float spec = pow(max(dot(view_dir, reflect_dir), 0.0), specular_exponent);
+    vec3 specular = 0.4 * spec * light_color * specular_color;
 
     // Calculate shadow
     float shadow;

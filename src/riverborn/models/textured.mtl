@@ -1,7 +1,8 @@
 newmtl plant
 Ka 1.000 1.000 1.000
 Kd 1.000 1.000 1.000
-Ks 0.000 0.000 0.000
+Ks 1.0 1.0 1.0
+Ns 32.0
 d 1.0
 illum 2
 # the ambient texture map
