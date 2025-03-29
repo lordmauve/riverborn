@@ -203,7 +203,7 @@ class SplashScreen:
                 await clock.default_clock.animate(self, 'accel_decel', 1.0, opacity=0.0)
                 self.active = False
                 self.app.voiceover('start')
-                await clock.default_clock.coro.sleep(60)
+                await clock.default_clock.coro.sleep(3 * 60)
                 if len(self.app.spotted_animals) < 3:
                     self.app.voiceover('2min')
                 await clock.default_clock.coro.sleep(60)
