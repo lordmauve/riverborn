@@ -261,7 +261,6 @@ class WaterApp(mglw.WindowConfig):
         self.canoe_angular_vel *= 0.3 ** dt
         self.canoe_rot += self.canoe_angular_vel * dt
 
-        prev_pos = self.canoe_pos3
         self.canoe.pos = glm.vec3(self.canoe_pos.x, 1, self.canoe_pos.y)
         self.canoe.rot = glm.quat(
             glm.angleAxis(self.canoe_rot, glm.vec3(0, 1, 0))
@@ -276,10 +275,12 @@ class WaterApp(mglw.WindowConfig):
             self.pos_to_water(front)
         )
 
+        self.camera.eye = self.canoe.pos + glm.vec3(0, 15, -20)
+        self.camera.look_at(self.canoe.pos)
+
     def on_render(self, time, frame_time):
         self.update(frame_time)
         self.camera.set_aspect(self.wnd.aspect_ratio)
-        self.camera.look_at(self.canoe_pos3)
 
         self.water_sim.simulate()
         # ------------------------------

@@ -29,7 +29,7 @@ void main() {
 
     // --- Fresnel term.
     vec3 view_dir = normalize(camera_pos - v_world);
-    float fresnel = pow(1.0 - max(dot(perturbed_normal, view_dir), 0.0), 5.0);
+    float fresnel = pow(1.0 - max(dot(perturbed_normal, view_dir), 0.0), 3.0);
 
     // --- Reflection from the environment.
     vec3 refl_dir = reflect(-view_dir, perturbed_normal);
