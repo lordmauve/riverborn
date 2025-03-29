@@ -85,20 +85,16 @@ class ShadowSystem:
         if not self.light:
             raise ValueError("Light not set")
 
-        # Bind shadow map framebuffer and clear it
-        self.shadow_map.fbo.clear(depth=1.0)
-        self.shadow_map.fbo.use()
-
-        # Enable depth testing
         ctx = mglw.ctx()
-        ctx.enable(moderngl.DEPTH_TEST)
+        with ctx.scope(self.shadow_map.fbo, enable=moderngl.DEPTH_TEST):
+            # Bind shadow map framebuffer and clear it
+            self.shadow_map.fbo.clear(depth=1.0)
 
-        # Set viewport to shadow map size
-        previous_viewport = ctx.viewport
-        ctx.viewport = (0, 0, self.shadow_map.width, self.shadow_map.height)
-        scene.render_depth(self.light.light_space_matrix)
-        ctx.viewport = previous_viewport
-        ctx.screen.use()
+            # Set viewport to shadow map size
+            previous_viewport = ctx.viewport
+            ctx.viewport = (0, 0, self.shadow_map.width, self.shadow_map.height)
+            scene.render_depth(self.light.light_space_matrix)
+            ctx.viewport = previous_viewport
 
     def setup_shadow_shader(self, camera: Camera, model: Model, **uniforms):
         """Set up the shadow shader for a specific model."""

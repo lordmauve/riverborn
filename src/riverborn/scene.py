@@ -864,8 +864,6 @@ class Scene:
         Args:
             scene: The scene to render
         """
-        self.ctx.enable(moderngl.DEPTH_TEST)
-
         # Render each model in the scene
         for model_name, model in self.models.items():
             # Skip models that don't cast shadows

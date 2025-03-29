@@ -7,6 +7,7 @@ from pathlib import Path
 import random
 import sys
 import moderngl
+from moderngl_window import geometry
 import moderngl_window as mglw
 import numpy as np
 import noise
@@ -14,6 +15,8 @@ import imageio as iio
 from wasabigeom import vec2
 from wasabi2d import loop, clock
 from pyglm import glm
+
+from riverborn.shadow_debug import render_small_shadow_map
 
 from .tools import TOOLS
 from . import picking
@@ -208,11 +211,6 @@ class WaterApp(mglw.WindowConfig):
         self.oar.local_pos = glm.vec3(0, 0, -1)
         self.oar.local_rot = glm.quat()
 
-        self.offscreen_depth = self.ctx.depth_texture(self.wnd.size)
-        self.offscreen_fbo = self.ctx.framebuffer(
-            depth_attachment=self.offscreen_depth,
-        )
-
         # Water plane geometry: a quad covering the same region.
         self.water_size = 100.0
         water_vertices, water_indices = create_quad(self.water_size)
@@ -249,6 +247,10 @@ class WaterApp(mglw.WindowConfig):
         # Water plane: a translation upward to water_level.
         self.water_model = glm.translate(glm.vec3([0.0, 1.0, 0.0]))
         # Water-bottom: assume at y = 0.
+
+        self.copy_vao = geometry.quad_fs(normals=False)
+
+        self.on_resize(*self.wnd.size)
 
     canoe_pos = vec2(0, 0)
     canoe_rot = 0
@@ -308,23 +310,20 @@ class WaterApp(mglw.WindowConfig):
 
         self.water_sim.simulate()
         # ------------------------------
-        # First pass: Render water-bottom scene into offscreen framebuffer.
+        # First pass: Render scene into offscreen framebuffer.
         # ------------------------------
-        self.offscreen_fbo.use()
-        self.ctx.clear(0.0, 0.0, 0.0, 1.0)
+        with self.ctx.scope(framebuffer=self.offscreen_fbo, enable=moderngl.DEPTH_TEST):
+            self.ctx.clear(0.2, 0.2, 0.4, 1.0)
+            self.scene.draw(self.camera, self.light)
 
-        view = self.camera.get_view_matrix()
-        proj = self.camera.get_proj_matrix()
-        self.scene.render_depth(proj * view)
-
-        # ------------------------------
-        # Second pass: Render water plane to the default framebuffer.
-        # ------------------------------
-
-        self.ctx.screen.use()
-        self.ctx.clear(0.2, 0.3, 0.4, 1.0)
-
-        self.scene.draw(self.camera, self.light)
+        copy_shader = load_shader("copy")
+        copy_shader.bind(
+            input_texture=self.offscreen_color,
+        )
+        with self.ctx.scope(enable_only=moderngl.NOTHING):
+            self.ctx.depth_mask = False
+            self.copy_vao.render(copy_shader)
+            self.ctx.depth_mask = True
 
         self.water_prog["env_cube"].value = 1
         self.water_prog["depth_tex"].value = 2
@@ -346,7 +345,7 @@ class WaterApp(mglw.WindowConfig):
         self.camera.bind(self.water_prog, pos_uniform="camera_pos")
         x, y, w, h = self.wnd.viewport
         self.water_prog["resolution"].value = self.wnd.size
-        with self.ctx.scope(enable_only=moderngl.BLEND | moderngl.DEPTH_TEST):
+        with self.ctx.scope(enable_only=moderngl.BLEND):
             self.water_vao.render()
         if self.recorder is not None:
             self.recorder._vid_frame()
@@ -355,18 +354,20 @@ class WaterApp(mglw.WindowConfig):
         # if self.light.shadows and self.light.shadow_system:
         #     render_small_shadow_map(
         #         *self.wnd.buffer_size,
-        #         self.light.shadow_system,
-        #         self.light
+        #         self.offscreen_depth,
+        #         self.camera
         #     )
 
     def on_resize(self, width: int, height: int):
         # When the window is resized, update the offscreen framebuffer and resolution uniform.
         self.offscreen_depth = self.ctx.depth_texture((width, height))
+        self.offscreen_color = self.ctx.texture((width, height), 4)
         self.offscreen_fbo = self.ctx.framebuffer(
+            color_attachments=[self.offscreen_color],
             depth_attachment=self.offscreen_depth,
         )
         self.water_prog["resolution"].value = (width, height)
-                # Create the camera.
+        # Create the camera.
         self.camera.set_aspect(width / height)
         self.ctx.gc()
 

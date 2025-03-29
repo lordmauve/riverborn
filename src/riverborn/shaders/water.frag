@@ -79,7 +79,12 @@ void main() {
     // Linearize the depths.
     float scene_lin = linearizeDepth(scene_depth);
     float water_lin = linearizeDepth(gl_FragCoord.z);
+
     float depth_diff = scene_lin - water_lin;
+    if (depth_diff < 0.0) {
+        // If the water is above the scene, we want it to be opaque.
+        discard;
+    }
     // When the water is shallow (small depth difference) we want more transparency.
     float shallow = clamp(depth_diff / water_opaque_depth, 0.0, 1.0);
 
