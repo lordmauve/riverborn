@@ -279,7 +279,7 @@ class WaterApp(mglw.WindowConfig):
 
     def update(self, dt: float) -> None:
         self.tool.update(dt)
-        self.canoe_vel *= 0.6 ** dt
+        self.canoe_vel *= 0.8 ** dt
         self.canoe_pos += self.canoe_vel * dt
         self.canoe_angular_vel *= 0.3 ** dt
         self.canoe_rot += self.canoe_angular_vel * dt
@@ -290,8 +290,8 @@ class WaterApp(mglw.WindowConfig):
         )
         m = self.canoe.matrix
 
-        back = m * glm.vec3(0, 0, 0.4)
-        front = m * glm.vec3(0, 0, -0.4)
+        back = m * glm.vec3(0, 0, 1)
+        front = m * glm.vec3(0, 0, -1)
 
         self.water_sim.disturb(
             self.pos_to_water(back),
