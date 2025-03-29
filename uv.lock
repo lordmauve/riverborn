@@ -82,6 +82,14 @@ wheels = [
 ]
 
 [[package]]
+name = "miniball"
+version = "1.2.1"
+source = { git = "https://github.com/akchan/miniball?rev=de1b552ea234e2b593a5458094264c50545225a5#de1b552ea234e2b593a5458094264c50545225a5" }
+dependencies = [
+    { name = "numpy" },
+]
+
+[[package]]
 name = "moderngl"
 version = "5.12.0"
 source = { registry = "https://pypi.org/simple" }
@@ -327,6 +335,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "imageio" },
+    { name = "miniball" },
     { name = "moderngl" },
     { name = "moderngl-window", extra = ["glfw", "pywavefront"] },
     { name = "noise" },
@@ -344,6 +353,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "imageio", specifier = ">=2.37.0" },
+    { name = "miniball", git = "https://github.com/akchan/miniball?rev=de1b552ea234e2b593a5458094264c50545225a5" },
     { name = "moderngl", specifier = ">=5.12.0" },
     { name = "moderngl-window", extras = ["glfw", "pywavefront"], specifier = ">=3.1.1" },
     { name = "noise", specifier = ">=1.2.2" },

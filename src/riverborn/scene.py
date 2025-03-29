@@ -28,13 +28,12 @@ import moderngl_window as mglw
 import numpy as np
 import logging
 from pyglm import glm
-import random
-import math
+import miniball
 import weakref
 from typing import List, Dict, Optional, Union, Tuple, Any
 from dataclasses import dataclass, field, asdict
 
-from riverborn import terrain
+from riverborn import culling, terrain
 from riverborn.camera import Camera
 from riverborn.shader import load_shader, BindableProgram
 from riverborn.terrain import blank_terrain, make_terrain, Mesh
@@ -313,6 +312,21 @@ class Model:
         """
         self.flush_instances()
 
+        m_proj = camera.get_proj_matrix()
+        m_view = camera.get_view_matrix()
+
+        center, radius = self.cull_volume
+        visible_instances, count = culling.cull_instances(
+            self.ctx,
+            self.instance_buffer,
+            self.instance_count,
+            m_proj * m_view,
+            center,
+            radius,
+        )
+        if count == 0:
+            return
+
         # Get the appropriate shader based on current state
 
         for part in self.parts:
@@ -321,8 +335,8 @@ class Model:
 
             # Create uniform dict based on shader and rendering state
             uniforms = {
-                'm_proj': camera.get_proj_matrix(),
-                'm_view': camera.get_view_matrix(),
+                'm_proj': m_proj,
+                'm_view': m_view,
                 **part.uniforms
             }
 
@@ -358,7 +372,7 @@ class Model:
             else:
                 vao_args = [
                     (part.vbo, *part.vbotype),
-                    (self.instance_buffer, '16f4/i', 'm_model')
+                    (visible_instances, '16f4/i', 'm_model')
                 ]
 
             # Create a vertex array for this part (with or without indices)
@@ -369,7 +383,7 @@ class Model:
 
             # Bind all uniforms and render
             shader.bind(**uniforms)
-            vao.render(instances=self.instance_count)
+            vao.render(instances=count)
 
             # Clean up the VAO since we don't store it
             vao.release()
@@ -409,21 +423,29 @@ class WavefrontModel(Model):
         """
         super().__init__(ctx, capacity, material)
 
+        all_verts = []
+
         for mesh_name, mesh_obj in mesh.meshes.items():
             for obj_material in mesh_obj.materials:
                 if not obj_material:
                     continue
+
+                vertices = np.array(obj_material.vertices, dtype='f4')
                 match obj_material.vertex_format:
                     case 'T2F_N3F_V3F':
                         vbotype = '2f 3f 3f', 'in_texcoord_0', 'in_normal', 'in_position'
+                        positions = vertices.reshape(-1, 8)[:, 5:]
                     case 'T2F_V3F':
                         vbotype = '2f 3f', 'in_texcoord_0', 'in_position'
+                        positions = vertices.reshape(-1, 5)[:, 2:]
                     case 'N3F_V3F':
                         vbotype = '3f 3f', 'in_normal', 'in_position'
+                        positions = vertices.reshape(-1, 6)[:, 3:]
                     case _:
                         raise ValueError(f"Unsupported vertex format: {obj_material.vertex_format}")
 
-                vertices = np.array(obj_material.vertices, dtype='f4')
+                all_verts.append(positions)
+
                 vbo = ctx.buffer(vertices.tobytes())
 
                 # Create uniforms dictionary for textures if present
@@ -457,6 +479,9 @@ class WavefrontModel(Model):
                 ]
 
                 self.parts.append(part)
+
+        all_vert_buf = np.concatenate(all_verts, axis=0)
+        self.cull_volume = miniball.get_bounding_ball(all_vert_buf)
 
 
 class TerrainModel(Model):
@@ -510,6 +535,7 @@ class TerrainModel(Model):
 
         # Add the part
         self.parts.append(self.part)
+        self.cull_volume = glm.vec3(0, 0, 0), 100000
 
     def update_mesh(self):
         """Update the mesh data in the GPU buffer."""

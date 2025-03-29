@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "imageio>=2.37.0",
+    "miniball",
     "moderngl>=5.12.0",
     "moderngl-window[glfw,pywavefront]>=3.1.1",
     "noise>=1.2.2",
@@ -57,3 +58,4 @@ ignore_missing_imports = true
 
 [tool.uv.sources]
 wasabi2d = { git = "https://github.com/lordmauve/wasabi2d/", rev = "ff3e7113743d0f8e5f778f94de3de9369ea46390" }
+miniball = { git = "https://github.com/akchan/miniball", rev = "de1b552ea234e2b593a5458094264c50545225a5" }
