@@ -26,6 +26,7 @@ import pywavefront
 import moderngl
 import moderngl_window as mglw
 import numpy as np
+import logging
 from pyglm import glm
 import random
 import math
@@ -42,6 +43,8 @@ from pyglm.glm import array
 if typing.TYPE_CHECKING:
     from riverborn.shadow import ShadowSystem
 
+
+logging.getLogger("pywavefront").level = logging.ERROR  # quiet, you
 
 vec3ish = Union[glm.vec3, tuple[float, float, float], list[float]]
 
