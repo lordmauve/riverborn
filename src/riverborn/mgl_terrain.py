@@ -111,6 +111,122 @@ def tick_loop(dt: float) -> None:
     loop.runnable, loop.runnable_next = loop.runnable_next, loop.runnable
 
 
+class SplashScreen:
+    def __init__(self, ctx):
+        self.ctx = ctx
+        self.active = True
+        self.opacity = 1.0
+        self.fading = False
+
+        # Load the logo texture
+        logo_path = importlib.resources.files('riverborn') / "textures/riverborn.png"
+        with logo_path.open('rb') as f:
+            logo_img = iio.imread(f)
+
+        logo_img = np.flipud(logo_img)
+
+        # Create texture from the image
+        self.logo_width, self.logo_height = logo_img.shape[1::-1]
+        self.logo_texture = ctx.texture((self.logo_width, self.logo_height), 4)
+        self.logo_texture.write(logo_img.tobytes())
+
+        # Aspect ratio of the logo
+        self.logo_aspect_ratio = self.logo_width / self.logo_height
+
+        # Create a quad for displaying the logo
+        self.logo_vao = geometry.quad_fs(normals=False)
+
+        # Create a shader for rendering the logo with opacity and proper aspect ratio
+        self.logo_shader = ctx.program(
+            vertex_shader='''
+                #version 330
+                in vec3 in_position;
+                in vec2 in_texcoord_0;
+                out vec2 uv;
+                void main() {
+                    gl_Position = vec4(in_position, 1.0);
+                    uv = in_texcoord_0;
+                }
+            ''',
+            fragment_shader='''
+                #version 330
+                uniform sampler2D logo_texture;
+                uniform float opacity;
+                uniform vec2 screen_size;
+                uniform vec2 logo_size;
+                in vec2 uv;
+                out vec4 fragColor;
+
+                void main() {
+                    // Calculate aspect ratios
+                    float screen_aspect = screen_size.x / screen_size.y;
+                    float logo_aspect = logo_size.x / logo_size.y;
+
+                    // Determine the scaling factors to maintain aspect ratio
+                    vec2 scale;
+                    if (screen_aspect > logo_aspect) {
+                        // Screen is wider than logo
+                        scale = vec2(logo_aspect / screen_aspect, 1.0);
+                    } else {
+                        // Screen is taller than logo
+                        scale = vec2(1.0, screen_aspect / logo_aspect);
+                    }
+
+                    // Scale logo to 40% of screen height
+                    scale *= 0.4;
+
+                    // Calculate new UV coordinates
+                    vec2 centered_uv = (uv - 0.5) / scale + 0.5;
+
+                    // Check if the pixel is within the logo bounds
+                    if (centered_uv.x < 0.0 || centered_uv.x > 1.0 ||
+                        centered_uv.y < 0.0 || centered_uv.y > 1.0) {
+                        fragColor = vec4(0.0, 0.0, 0.0, 0.0);
+                    } else {
+                        vec4 color = texture(logo_texture, centered_uv);
+                        fragColor = vec4(color.rgb, color.a * opacity);
+                    }
+                }
+            '''
+        )
+
+        # Initial screen size will be updated in render
+        self.screen_size = (1.0, 1.0)
+
+    def start_fade_out(self):
+        """Start the fade-out animation"""
+        if self.active and not self.fading:
+            self.fading = True
+
+            async def fade():
+                await clock.default_clock.animate(self, 'accel_decel', 1.0, opacity=0.0)
+                self.active = False
+
+            loop.do(fade())
+
+    def render(self):
+        """Render the splash screen if active"""
+        if not self.active:
+            return
+
+        # Update screen size uniform
+        self.screen_size = self.ctx.fbo.size
+
+        self.logo_texture.use(0)
+        self.logo_shader['logo_texture'] = 0
+        self.logo_shader['opacity'] = self.opacity
+        self.logo_shader['screen_size'] = self.screen_size
+        self.logo_shader['logo_size'] = (self.logo_width, self.logo_height)
+
+        # Clear the depth buffer so splash screen renders on top
+        self.ctx.screen.color_mask = False, False, False, False
+        self.ctx.clear(depth=1.0)
+        self.ctx.screen.color_mask = True, True, True, True
+
+        with self.ctx.scope(enable_only=moderngl.BLEND):
+            self.logo_vao.render(self.logo_shader)
+
+
 class WaterApp(mglw.WindowConfig):
     gl_version = (3, 3)
     title = "Riverborn"
@@ -119,13 +235,16 @@ class WaterApp(mglw.WindowConfig):
     resizable = False
 
     # FIXME: need to use package data
-    resource_dir = Path(__file__).parent.parent.parent / 'assets_source/'
+    resource_dir = Path(__file__).parent
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.ctx.gc_mode = "auto"
         self.ctx.enable(moderngl.DEPTH_TEST)
         self.tool = TOOLS[self.tool_id](self)
+
+        # Create splash screen
+        self.splash_screen = SplashScreen(self.ctx)
 
         # Create the scene
         self.scene = Scene()
@@ -389,8 +508,13 @@ class WaterApp(mglw.WindowConfig):
         self.water_prog["resolution"].value = self.wnd.size
         with self.ctx.scope(enable_only=moderngl.BLEND):
             self.water_vao.render()
+
         if self.recorder is not None:
             self.recorder._vid_frame()
+
+        # Render splash screen on top if active
+        if self.splash_screen.active:
+            self.splash_screen.render()
 
         # Display a small shadow map preview
         # if self.light.shadows and self.light.shadow_system:
@@ -455,9 +579,13 @@ class WaterApp(mglw.WindowConfig):
         self.tool = cls(self)
 
     def on_key_event(self, key, action, modifiers):
+        # If splash screen is active and space is pressed, start fade-out
+        keys = self.wnd.keys
+        if action == self.wnd.keys.ACTION_PRESS and key == keys.SPACE and self.splash_screen.active:
+            self.splash_screen.start_fade_out()
+            return
 
         op = 'press' if action == self.wnd.keys.ACTION_PRESS else 'release'
-        keys = self.wnd.keys
         match op, key, modifiers.shift:
             case ('press', keys.ESCAPE, _):
                 sys.exit()
