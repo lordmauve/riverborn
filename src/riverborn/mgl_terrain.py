@@ -204,9 +204,11 @@ class SplashScreen:
                 self.active = False
                 self.app.voiceover('start')
                 await clock.default_clock.coro.sleep(60)
-                self.app.voiceover('2min')
+                if len(self.app.spotted_animals) < 3:
+                    self.app.voiceover('2min')
                 await clock.default_clock.coro.sleep(60)
-                self.app.voiceover('1min')
+                if len(self.app.spotted_animals) < 3:
+                    self.app.voiceover('1min')
                 await clock.default_clock.coro.sleep(60)
                 if len(self.app.spotted_animals) < 3:
                     self.app.voiceover('failed')
