@@ -279,15 +279,7 @@ class WaterApp(mglw.WindowConfig):
 
     def update(self, dt: float) -> None:
         self.tool.update(dt)
-        self.canoe_vel *= 0.8 ** dt
-        self.canoe_pos += self.canoe_vel * dt
-        self.canoe_angular_vel *= 0.3 ** dt
-        self.canoe_rot += self.canoe_angular_vel * dt
-
-        self.canoe.pos = glm.vec3(self.canoe_pos.x, 1, self.canoe_pos.y)
-        self.canoe.rot = glm.quat(
-            glm.angleAxis(self.canoe_rot, glm.vec3(0, 1, 0))
-        )
+        self.update_canoe(dt)
         m = self.canoe.matrix
 
         back = m * glm.vec3(0, 0, 1)
@@ -302,6 +294,43 @@ class WaterApp(mglw.WindowConfig):
 
         self.camera.eye = self.canoe.pos + glm.vec3(0, 15, -20)
         self.camera.look_at(self.canoe.pos)
+
+    def update_canoe(self, dt):
+        self.canoe_vel *= 0.9 ** dt
+        current_height = self.terrain_instance.model.mesh.get_terrain_height(
+            self.canoe_pos
+        )
+
+        # Compute the candidate new position based on current velocity
+        candidate_pos = self.canoe_pos + self.canoe_vel * dt
+
+        # Get terrain height at the candidate position.
+        # Note: self.canoe_pos is a vec2 where x is world x and y is world z.
+        terrain_height = self.terrain_instance.model.mesh.get_terrain_height(
+            candidate_pos
+        )
+
+        # Check if the terrain is too high (land, where height > 1)
+        if terrain_height > 1 and terrain_height >= current_height:
+            # Collision: cancel or reduce the movement.
+            # Here, we simply dampen the velocity further.
+            self.canoe_vel *= 1 / (terrain_height + 1) ** dt
+            # Optionally, you might choose not to update self.canoe_pos at all.
+            self.canoe_pos += self.canoe_vel * dt
+            terrain_height = self.terrain_instance.model.mesh.get_terrain_height(
+                self.canoe_pos
+            )
+        else:
+            # No collision: update the canoe's position
+            self.canoe_pos = candidate_pos
+
+        # Update angular velocity and rotation as usual
+        self.canoe_angular_vel *= 0.3 ** dt
+        self.canoe_rot += self.canoe_angular_vel * dt
+
+        # Update the display model. We keep a constant water level of y=1.
+        self.canoe.pos = glm.vec3(self.canoe_pos.x, max(terrain_height, 1), self.canoe_pos.y)
+        self.canoe.rot = glm.quat(glm.angleAxis(self.canoe_rot, glm.vec3(0, 1, 0)))
 
     def on_render(self, time, frame_time):
         tick_loop(frame_time)
@@ -435,7 +464,6 @@ class WaterApp(mglw.WindowConfig):
 
             case 'press', keys.RIGHT, _:
                 self.paddle(1)
-
 
 
 

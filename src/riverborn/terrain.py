@@ -17,6 +17,43 @@ class Mesh:
         """Get the heights of the vertices."""
         return self.vertices["in_position"][:, 1].reshape(self.segments + 1, self.segments + 1)
 
+    def get_terrain_height(self, pos) -> float:
+        # Get the heightfield (shape: (rows, cols))
+        heightfield = self.heights
+        rows, cols = heightfield.shape
+
+        terrain_width = self.grid_width
+        terrain_depth = self.grid_depth
+
+        # Map world x,z (pos.x, pos.y) to grid indices (floating point)
+        fx = (pos.x + terrain_width / 2) / terrain_width * (cols - 1)
+        fy = (pos.y + terrain_depth / 2) / terrain_depth * (rows - 1)
+
+        # Clamp the floating point indices to be within valid range
+        fx = max(0, min(cols - 1, fx))
+        fy = max(0, min(rows - 1, fy))
+
+        # Get the integer positions for interpolation
+        x0 = int(fx)
+        y0 = int(fy)
+        x1 = min(x0 + 1, cols - 1)
+        y1 = min(y0 + 1, rows - 1)
+
+        # Compute the fractional part
+        tx = fx - x0
+        ty = fy - y0
+
+        # Retrieve the heights from the four surrounding grid points
+        h00 = heightfield[y0, x0]
+        h10 = heightfield[y0, x1]
+        h01 = heightfield[y1, x0]
+        h11 = heightfield[y1, x1]
+
+        # Perform bilinear interpolation
+        height = (1 - tx) * (1 - ty) * h00 + tx * (1 - ty) * h10 \
+                + (1 - tx) * ty * h01 + tx * ty * h11
+        return height
+
 
 def blank_terrain(
     segments: int,
