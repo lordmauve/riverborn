@@ -65,8 +65,8 @@ void main() {
 
     // Specular (optional)
     vec3 reflect_dir = reflect(-light, normal);
-    float spec = pow(max(dot(view_dir, reflect_dir), 0.0), 32.0);
-    vec3 specular = 0.2 * spec * light_color;
+    float spec = pow(max(dot(view_dir, reflect_dir), 0.0), 16.0);
+    vec3 specular = 0.4 * spec * light_color;
 
     // Calculate shadow
     float shadow;
