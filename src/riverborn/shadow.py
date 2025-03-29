@@ -115,7 +115,7 @@ class ShadowSystem:
             shadow_map=self.shadow_map.depth_texture,
             use_pcf=self.use_pcf,
             pcf_radius=1.0,
-            shadow_bias=0.01,
+            shadow_bias=0.001,
             **uniforms
         )
         return shader

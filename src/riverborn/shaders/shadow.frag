@@ -16,7 +16,7 @@ uniform vec3 ambient_color;
 uniform vec3 camera_pos;
 const vec3 transmissivity = vec3(0.2, 0.2, 0.2);  // How much light passes through the surface
 
-uniform float shadow_bias = 0.005;
+uniform float shadow_bias = 0.001;
 uniform float pcf_radius = 1.0;
 uniform bool use_pcf = true;
 

@@ -345,7 +345,7 @@ class Model:
                         'shadow_map': shadow_map,
                         'use_pcf': shadow_system.use_pcf,
                         'pcf_radius': 1.0,
-                        'shadow_bias': 0.01,
+                        'shadow_bias': 0.002,
                     })
 
             # Create VAO for rendering based on part properties

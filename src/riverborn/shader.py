@@ -413,7 +413,10 @@ class BindableProgram(moderngl.Program):
                     except struct.error as e:
                         raise ValueError(f"Invalid value for {obj.fmt} uniform '{k}': {val!r}") from e
         for k, v in uniforms.items():
-            warnings.warn(f"Unused uniform '{k}' passed to {self.label}: {type(v)}", UserWarning, stacklevel=2)
+            try:
+                warnings.warn(f"Unused uniform '{k}' passed to {self.label}: {type(v)}", UserWarning, stacklevel=2)
+            except moderngl.Error:
+                pass
         if missing:
             raise ValueError(f"Missing uniforms in {self.label}: {', '.join(missing)}")
 
