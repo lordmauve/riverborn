@@ -347,7 +347,7 @@ class WaterApp(mglw.WindowConfig):
         # First pass: Render scene into offscreen framebuffer.
         # ------------------------------
         with self.ctx.scope(framebuffer=self.offscreen_fbo, enable=moderngl.DEPTH_TEST):
-            self.ctx.clear(0.2, 0.2, 0.4, 1.0)
+            self.ctx.clear(0.6, 0.7, 1.0, 1.0)
             self.scene.draw(self.camera, self.light)
 
         copy_shader = load_shader("copy")
