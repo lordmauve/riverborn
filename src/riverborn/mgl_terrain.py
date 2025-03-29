@@ -155,10 +155,12 @@ class WaterApp(mglw.WindowConfig):
             cast_shadows=True      # This terrain casts shadows
         )
 
+        self.terrain_width = self.terrain_depth = 200
+
         try:
             terrain_model = self.scene.load_terrain(
                 'data/terrain.npy',
-                width=200,
+                width=self.terrain_width,
                 depth=200,
                 texture=terrain_texture,
                 material=terrain_material
@@ -167,8 +169,8 @@ class WaterApp(mglw.WindowConfig):
             terrain_model = self.scene.create_terrain(
                 'terrain',
                 segments=100,
-                width=200,
-                depth=200,
+                width=self.terrain_width,
+                depth=self.terrain_depth,
                 height=10,
                 noise_scale=0.05,
                 texture=terrain_texture,

@@ -84,6 +84,14 @@ class RaiseTool:
         recompute_normals(model.mesh)
         model.update_mesh()
 
+        # Convert texture coordinates to world position
+        norm_x, norm_z = x, y
+        world_x = (norm_x * self.app.terrain_width) - (self.app.terrain_width / 2)
+        world_z = (norm_z * self.app.terrain_depth) - (self.app.terrain_depth / 2)
+        radius = 8 if self.speed > 0 else 4
+
+        self.app.plants.rebuild_plants_in_area(world_x, world_z, radius)
+
     def on_mouse_drag_event(self, x, y, dx, dy):
         # Convert mouse coordinates (window: origin top-left) to texture coordinates (origin bottom-left)
         self.last_mouse = self.app.screen_to_water(x, y)
@@ -127,6 +135,13 @@ class SmoothTool:
 
         recompute_normals(model.mesh)
         model.update_mesh()
+
+        # Convert texture coordinates to world position
+        norm_x, norm_z = x, y
+        world_x = (norm_x * self.app.terrain_width) - (self.app.terrain_width / 2)
+        world_z = (norm_z * self.app.terrain_depth) - (self.app.terrain_depth / 2)
+
+        self.app.plants.rebuild_plants_in_area(world_x, world_z, 8)
 
     def on_mouse_drag_event(self, x, y, dx, dy):
         # Convert mouse coordinates (window: origin top-left) to texture coordinates (origin bottom-left)

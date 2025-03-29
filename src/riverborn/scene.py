@@ -611,31 +611,40 @@ class Instance:
         The last instance's matrix is copied over to this slot and the count is decremented.
         It also updates the index of any instance that was using the last slot.
         """
+        # Early return if already deleted
         if self._deleted:
             return
 
+        # Get the index of the last instance
         last_index = self.model.instance_count - 1
+
+        # If we're not deleting the last instance, we need to move the last one to this slot
         if self.index != last_index:
             # Get the instance that uses the last slot
             last_instance = self.model.instance_refs.get(last_index)
 
-            if last_instance:
-                # Update its index to point to the slot we're removing
-                last_instance.index = self.index
+            assert last_instance and not last_instance._deleted
 
-                # Update the instance reference mapping
-                self.model.instance_refs[self.index] = self.model.instance_refs[last_index]
+            # Update its index to point to the slot we're removing
+            last_instance.index = self.index
+
+            # Update the instance reference mapping
+            self.model.instance_refs[self.index] = last_instance
 
             # Copy the last matrix to this slot
             self.model.instance_matrices[self.index] = self.model.instance_matrices[last_index]
-            self.model.instances_dirty = True
 
         # Remove the reference to the last slot
-        if last_index in self.model.instance_refs:
-            del self.model.instance_refs[last_index]
+        del self.model.instance_refs[last_index]
 
+        # Decrement the instance count if it's positive
         self.model.instance_count -= 1
+
+        # Mark as deleted to prevent further operations on this instance
         self._deleted = True
+
+        # Update the instance buffer to reflect changes
+        self.model.instances_dirty = True
 
 
 @dataclass
