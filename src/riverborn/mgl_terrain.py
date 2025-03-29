@@ -259,16 +259,6 @@ class WaterApp(mglw.WindowConfig):
 
     def paddle(self, side: float) -> None:
         """Paddle in the water."""
-        oar = self.oar
-
-        async def lerp(target: glm.vec3, duration: float = 1.0):
-            start = oar.local_pos
-            async for dt in clock.coro.frames_dt(seconds=duration):
-                dist = glm.distance(oar.local_pos, target)
-                if dist < 0.1:
-                    break
-                oar.local_pos += (target - self.canoe.pos) * speed * dt
-
         async def paddle():
             await clock.default_clock.animate(self.oar, 'accel_decel', 0.3, local_pos=glm.vec3(-side, 0, 1))
 
