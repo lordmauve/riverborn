@@ -3,6 +3,7 @@ import typing
 
 import numpy as np
 from pyglm import glm
+from wasabigeom import vec2
 
 from .terrain import recompute_normals
 
@@ -278,4 +279,32 @@ class AnimalDeletionTool:
         pass
 
     def update(self, dt: float):
+        pass
+
+
+@register_tool
+class WarpCanoeTool:
+    """Warp the canoe to the clicked point.
+
+    Left-click on the ground to instantly teleport the canoe.
+    """
+    def __init__(self, app: 'WaterApp'):
+        self.app = app
+
+    def update(self, dt: float):
+        pass
+
+    def on_mouse_press_event(self, x, y, button):
+        # Get the ground position from the click
+        pos = self.app.screen_to_ground(x, y)
+        if pos is None:
+            return
+        # Set the canoe_pos (a vec2) to the new x and z, the update loop will adjust y.
+        self.app.canoe_pos = vec2(pos.x, pos.z)
+        print(f"Canoe warped to: ({pos.x:.2f}, {pos.z:.2f})")
+
+    def on_mouse_drag_event(self, x, y, dx, dy):
+        pass
+
+    def on_mouse_release_event(self, x, y, button):
         pass
