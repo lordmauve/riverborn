@@ -233,3 +233,49 @@ class AnimalPlacementTool:
             self.current_index = (self.current_index - 1) % len(self.animal_types)
         self.animal_type = self.animal_types[self.current_index]
         print(f"Animal selected: {self.animal_type}")
+
+
+@register_tool
+class AnimalDeletionTool:
+    """Delete animals near the mouse click position.
+
+    Left-click on or near an animal to remove it.
+    """
+    def __init__(self, app: 'WaterApp'):
+        self.app = app
+        self.delete_radius = 5.0  # threshold distance in world space
+
+    def on_mouse_press_event(self, x, y, button):
+        # Convert mouse coordinates to ground position.
+        pos = self.app.screen_to_ground(x, y)
+        if pos is None:
+            return
+        # Check if the click position is valid.
+        # Iterate over all animal instances.
+        to_delete = None
+        to_delete_dist = self.delete_radius
+        for animal, instances in list(self.app.animals.animals.items()):
+            for instance in list(instances):
+                # Compute distance in the XZ (ground) plane.
+                dx = instance.pos.x - pos.x
+                dz = instance.pos.z - pos.z
+                distance = math.sqrt(dx * dx + dz * dz)
+                if distance < to_delete_dist:
+                    to_delete = animal, instance, instances
+                    to_delete_dist = distance
+
+        if to_delete is not None:
+            animal, instance, instances = to_delete
+            # Remove the instance from the scene.
+            instance.delete()
+            instances.remove(instance)
+            print(f"Deleted {animal} at pos ({instance.pos.x}, {instance.pos.z})")
+
+    def on_mouse_drag_event(self, x, y, dx, dy):
+        pass
+
+    def on_mouse_release_event(self, x, y, button):
+        pass
+
+    def update(self, dt: float):
+        pass
