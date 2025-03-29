@@ -6,7 +6,9 @@ in vec2 v_texcoord;
 out vec4 fragColor;
 
 const float dt = 1.0;
-const float tension = 0.1;
+
+// higher tension means faster ripples
+const float tension = 0.05;
 const float damping_factor = 0.99;
 
 void main() {

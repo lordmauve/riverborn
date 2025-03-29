@@ -96,7 +96,7 @@ class WaterSimulation:
             self.render_prog["height_tex"].value = 0
             self.quad.render(self.render_prog)
 
-    def disturb(self, p1, p2):
+    def disturb(self, p1, p2, intensity=0.5, thickness=0.001):
         """
         Apply a disturbance (ripple) into the current simulation texture.
         Expects p1 and p2 to be texture coordinates (tuples).
@@ -108,6 +108,8 @@ class WaterSimulation:
             with blend_func(moderngl.SRC_ALPHA, moderngl.ONE):
                 self.disturb_prog["p1"].value = p1
                 self.disturb_prog["p2"].value = p2
+                self.disturb_prog["intensity"].value = intensity
+                self.disturb_prog["thickness"].value = thickness
                 self.quad.render(self.disturb_prog)
 
 

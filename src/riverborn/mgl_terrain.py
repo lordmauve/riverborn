@@ -272,7 +272,7 @@ class WaterApp(mglw.WindowConfig):
 
         self.water_sim.disturb(
             self.pos_to_water(back),
-            self.pos_to_water(front)
+            self.pos_to_water(front),
         )
 
         self.camera.eye = self.canoe.pos + glm.vec3(0, 15, -20)
