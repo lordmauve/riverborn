@@ -65,6 +65,23 @@ wheels = [
 ]
 
 [[package]]
+name = "mapbox-earcut"
+version = "1.0.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8d/70/0a322197c1178f47941e5e6e13b0a4adeaaa7c465c18e3b4ead3eba49860/mapbox_earcut-1.0.3.tar.gz", hash = "sha256:b6bac5d519d9947a6321a699c15d58e0b5740da61b9210ed229e05ad207c1c04", size = 24029 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ff/0c/33d1fe1df098d33fce673fe153a52a7ef482bae19afcc295aa36bfdd7d33/mapbox_earcut-1.0.3-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:22859490a83a614750dee24c08502fbe14f01a808c0f0f8626261b43ec186762", size = 70373 },
+    { url = "https://files.pythonhosted.org/packages/9f/f0/3c7d62f1e0aea0285da578ea1c98686c8d915143df17ff5ed37b04882cac/mapbox_earcut-1.0.3-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:ad9b97512b7e917cec9af399a344f8844b0ca6c074f354a5b06f58c393c4d9b0", size = 64755 },
+    { url = "https://files.pythonhosted.org/packages/13/9a/9eb83efbe87ebf41d1a78efe3c0d906212e5dd91c8f24a9fc7491908ccd5/mapbox_earcut-1.0.3-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:05de0accc70431c2270dbb13fd75b6f10b19624d42f26b377995b1fb46ac5844", size = 96198 },
+    { url = "https://files.pythonhosted.org/packages/8b/4a/24182a96ad4bb086b04fff5d14c9f62fc3b89000bea2f05240aa6128bd03/mapbox_earcut-1.0.3-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:2d25c856a1ee6c69f51b82df5a06ea6cea66ce3a7c6043a602edfc5c2fe33e32", size = 1070844 },
+    { url = "https://files.pythonhosted.org/packages/67/9d/edc1f0bb03079293a28f7d1e5d496ee0da16822908c09268b049aa056288/mapbox_earcut-1.0.3-cp313-cp313-win32.whl", hash = "sha256:9ec67d2dc733c7235114e5fa93baae4aa2de8c6210e01e8efd85e5b9cc0deb53", size = 65431 },
+    { url = "https://files.pythonhosted.org/packages/93/f1/e6987c97bb4bac6daf0084e72f457d5214bc8b054d465363060364121a9b/mapbox_earcut-1.0.3-cp313-cp313-win_amd64.whl", hash = "sha256:473012494fd7a51c424a6835fb03c9ee461c540df87492f0ee9bb2f56c456c0c", size = 72586 },
+]
+
+[[package]]
 name = "moderngl"
 version = "5.12.0"
 source = { registry = "https://pypi.org/simple" }
@@ -105,6 +122,15 @@ glfw = [
 ]
 pywavefront = [
     { name = "pywavefront" },
+]
+
+[[package]]
+name = "multipledispatch"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/fe/3e/a62c3b824c7dec33c4a1578bcc842e6c30300051033a4e5975ed86cc2536/multipledispatch-1.0.0.tar.gz", hash = "sha256:5c839915465c68206c3e9c473357908216c28383b425361e5d144594bf85a7e0", size = 12385 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/51/c0/00c9809d8b9346eb238a6bbd5f83e846a4ce4503da94a4c08cb7284c325b/multipledispatch-1.0.0-py3-none-any.whl", hash = "sha256:0c53cd8b077546da4e48869f49b13164bebafd0c2a5afceb6bb6a316e7fb46e4", size = 12818 },
 ]
 
 [[package]]
@@ -215,6 +241,21 @@ wheels = [
 ]
 
 [[package]]
+name = "pygame"
+version = "2.6.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/49/cc/08bba60f00541f62aaa252ce0cfbd60aebd04616c0b9574f755b583e45ae/pygame-2.6.1.tar.gz", hash = "sha256:56fb02ead529cee00d415c3e007f75e0780c655909aaa8e8bf616ee09c9feb1f", size = 14808125 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e1/91/718acf3e2a9d08a6ddcc96bd02a6f63c99ee7ba14afeaff2a51c987df0b9/pygame-2.6.1-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:ae6039f3a55d800db80e8010f387557b528d34d534435e0871326804df2a62f2", size = 13090765 },
+    { url = "https://files.pythonhosted.org/packages/0e/c6/9cb315de851a7682d9c7568a41ea042ee98d668cb8deadc1dafcab6116f0/pygame-2.6.1-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:2a3a1288e2e9b1e5834e425bedd5ba01a3cd4902b5c2bff8ed4a740ccfe98171", size = 12381704 },
+    { url = "https://files.pythonhosted.org/packages/9f/8f/617a1196e31ae3b46be6949fbaa95b8c93ce15e0544266198c2266cc1b4d/pygame-2.6.1-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:27eb17e3dc9640e4b4683074f1890e2e879827447770470c2aba9f125f74510b", size = 13581091 },
+    { url = "https://files.pythonhosted.org/packages/3b/87/2851a564e40a2dad353f1c6e143465d445dab18a95281f9ea458b94f3608/pygame-2.6.1-cp313-cp313-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:4c1623180e70a03c4a734deb9bac50fc9c82942ae84a3a220779062128e75f3b", size = 14273844 },
+    { url = "https://files.pythonhosted.org/packages/85/b5/aa23aa2e70bcba42c989c02e7228273c30f3b44b9b264abb93eaeff43ad7/pygame-2.6.1-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ef07c0103d79492c21fced9ad68c11c32efa6801ca1920ebfd0f15fb46c78b1c", size = 13951197 },
+    { url = "https://files.pythonhosted.org/packages/a6/06/29e939b34d3f1354738c7d201c51c250ad7abefefaf6f8332d962ff67c4b/pygame-2.6.1-cp313-cp313-win32.whl", hash = "sha256:3acd8c009317190c2bfd81db681ecef47d5eb108c2151d09596d9c7ea9df5c0e", size = 10249309 },
+    { url = "https://files.pythonhosted.org/packages/7e/11/17f7f319ca91824b86557e9303e3b7a71991ef17fd45286bf47d7f0a38e6/pygame-2.6.1-cp313-cp313-win_amd64.whl", hash = "sha256:813af4fba5d0b2cb8e58f5d95f7910295c34067dcc290d34f1be59c48bd1ea6a", size = 10620084 },
+]
+
+[[package]]
 name = "pyglet"
 version = "2.1.3"
 source = { registry = "https://pypi.org/simple" }
@@ -242,6 +283,19 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/e5/b2/9660e629eb4982cfaa653e33fd8d1efb3c9f26ae5dd0a7d157548242d5d2/pyglm-2.8.0-cp313-cp313-win32.whl", hash = "sha256:1c5788d9f497d0e83a65ec74ca25c02337eb37bc84ebfb23208239f1c6bc7d72", size = 1302590 },
     { url = "https://files.pythonhosted.org/packages/42/df/07dd41ffa6b668726a88f9dc82dea90340406e2bf7a2f93e8a8cdb032dd9/pyglm-2.8.0-cp313-cp313-win_amd64.whl", hash = "sha256:09f097123065ec826bc89b37ef9817f70152f194ac4cc122b622ee942284b325", size = 1665607 },
     { url = "https://files.pythonhosted.org/packages/53/d2/d4bfb37f81bc41875a0fdda472bb4988ef445794107fa6c2aea7df09228e/pyglm-2.8.0-cp313-cp313-win_arm64.whl", hash = "sha256:3d2dd466801a695fa732c9413ca1d12c4eafb165e79c10c58ab9be9c767990bf", size = 1239902 },
+]
+
+[[package]]
+name = "pyrr"
+version = "0.10.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "multipledispatch" },
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e5/7f/2af23f61340972116e4efabc3ac6e02c8bad7f7315b3002c278092963f17/pyrr-0.10.3.tar.gz", hash = "sha256:3c0f7b20326e71f706a610d58f2190fff73af01eef60c19cb188b186f0ec7e1d", size = 64845 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/80/d4/09bb74e93f9f677eadcf9ddb92681755f75e0f354a1b904f1913e32ca1b2/pyrr-0.10.3-py3-none-any.whl", hash = "sha256:d8af23fb9bb29262405845e1c98f7339fbba5e49323b98528bd01160a75c65ac", size = 46790 },
 ]
 
 [[package]]
@@ -278,6 +332,7 @@ dependencies = [
     { name = "noise" },
     { name = "numpy" },
     { name = "wasabi-geom" },
+    { name = "wasabi2d" },
 ]
 
 [package.dev-dependencies]
@@ -294,12 +349,22 @@ requires-dist = [
     { name = "noise", specifier = ">=1.2.2" },
     { name = "numpy", specifier = ">=2.2.4" },
     { name = "wasabi-geom", specifier = ">=2.3.0" },
+    { name = "wasabi2d", git = "https://github.com/lordmauve/wasabi2d/?rev=ff3e7113743d0f8e5f778f94de3de9369ea46390" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "mypy", specifier = ">=1.15.0" },
     { name = "pytest", specifier = ">=8.3.5" },
+]
+
+[[package]]
+name = "sortedcontainers"
+version = "2.4.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575 },
 ]
 
 [[package]]
@@ -325,4 +390,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/8d/af/b00a607c22cb0a4e77e49f3d1c773e00e008d1eb15b4a4d686140647e51b/wasabi_geom-2.3.0-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:37a5345a11c86f4e840050d111dc7a8216dc63847fb1fbd930b5cd019e9477e4", size = 1833187 },
     { url = "https://files.pythonhosted.org/packages/ab/39/f7c327d8793cb8d0a55ad2ffcf348a171197f49b770fe2bedf6b169608fd/wasabi_geom-2.3.0-cp313-cp313-win32.whl", hash = "sha256:bbb9e1b5881c35609524036c1e8e4219cfb0d79b71ffa36669102d827fabd8a2", size = 212919 },
     { url = "https://files.pythonhosted.org/packages/58/65/f0f947cac067934e3b1b6e09f33bd77cfc4181043cc203cbb2b7f7f27248/wasabi_geom-2.3.0-cp313-cp313-win_amd64.whl", hash = "sha256:df02855c3658acc72eff7a1952e9fcc908eba4dad3147c0499bf12f5af484e2d", size = 252129 },
+]
+
+[[package]]
+name = "wasabi2d"
+version = "1.4.0"
+source = { git = "https://github.com/lordmauve/wasabi2d/?rev=ff3e7113743d0f8e5f778f94de3de9369ea46390#ff3e7113743d0f8e5f778f94de3de9369ea46390" }
+dependencies = [
+    { name = "mapbox-earcut" },
+    { name = "moderngl" },
+    { name = "numpy" },
+    { name = "pygame" },
+    { name = "pyrr" },
+    { name = "sortedcontainers" },
+    { name = "wasabi-geom" },
 ]

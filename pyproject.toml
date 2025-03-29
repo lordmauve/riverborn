@@ -11,6 +11,7 @@ dependencies = [
     "noise>=1.2.2",
     "numpy>=2.2.4",
     "wasabi-geom>=2.3.0",
+    "wasabi2d",
 ]
 
 [project.scripts]
@@ -53,3 +54,6 @@ module = [
     "pywavefront",
 ]
 ignore_missing_imports = true
+
+[tool.uv.sources]
+wasabi2d = { git = "https://github.com/lordmauve/wasabi2d/", rev = "ff3e7113743d0f8e5f778f94de3de9369ea46390" }

@@ -1,4 +1,5 @@
 import atexit
+import heapq
 import importlib.resources
 from itertools import product
 import math
@@ -11,18 +12,18 @@ import numpy as np
 import noise
 import imageio as iio
 from wasabigeom import vec2
+from wasabi2d import loop, clock
 from pyglm import glm
 
-from riverborn import picking
-from riverborn.camera import Camera
-from riverborn.plants import PlantGrid
-from riverborn.scene import Light, Material, Scene
-from riverborn.shader import load_shader
-from riverborn.shadow_debug import render_small_shadow_map
-from riverborn.terrain import recompute_normals
-
+from .tools import TOOLS
+from . import picking
+from .camera import Camera
+from .plants import PlantGrid
+from .scene import Light, Material, Scene
+from .shader import load_shader
 from .ripples import WaterSimulation
 from .heightfield import create_noise_texture
+
 
 # Helper: create a simple quad geometry with positions (3f) and UV coordinates (2f)
 def create_quad(size):
@@ -83,6 +84,26 @@ def load_env_map(ctx: moderngl.Context) -> moderngl.TextureCube:
 
 SUN_DIR = glm.normalize(glm.vec3(1, 1, 1))
 
+# Clear a default PygameEvents.run task
+loop._clear_all()
+
+
+def tick_loop(dt: float) -> None:
+    clock.default_clock.tick(dt)
+
+    while loop.runnable:
+        task = heapq.heappop(loop.runnable)
+        try:
+            task._step()
+        except SystemExit as e:
+            if main:
+                exit = e
+                main.cancel()
+            else:
+                raise
+    for task in loop.runnable_next:
+        task._resume_value = dt
+    loop.runnable, loop.runnable_next = loop.runnable_next, loop.runnable
 
 
 class WaterApp(mglw.WindowConfig):
@@ -234,10 +255,24 @@ class WaterApp(mglw.WindowConfig):
     canoe_pos3 = glm.vec3()
     CANOE_SIZE = 5
 
+    paddle_task = None
+
     def paddle(self, side: float) -> None:
         """Paddle in the water."""
-        self.canoe_angular_vel += side * 0.5
-        self.canoe_vel += vec2(0, 0.5).rotated(-self.canoe_rot)
+        async def paddle():
+            self.canoe_angular_vel += side * 0.5
+            self.canoe_vel += vec2(0, 0.5).rotated(-self.canoe_rot)
+
+            self.oar.local_pos = glm.vec3(1, 0, -0.5) * side
+
+            speed = glm.vec3(0, 0, 1)
+
+            async for dt in clock.coro.frames_dt(seconds=1):
+                self.oar.local_pos += dt * speed
+
+        if self.paddle_task is not None:
+            self.paddle_task.cancel()
+        self.paddle_task = loop.do(paddle())
 
     def update(self, dt: float) -> None:
         self.tool.update(dt)
@@ -266,6 +301,7 @@ class WaterApp(mglw.WindowConfig):
         self.camera.look_at(self.canoe.pos)
 
     def on_render(self, time, frame_time):
+        tick_loop(frame_time)
         self.update(frame_time)
         self.camera.set_aspect(self.wnd.aspect_ratio)
 
@@ -398,156 +434,6 @@ class WaterApp(mglw.WindowConfig):
             case 'press', keys.RIGHT, _:
                 self.paddle(1)
 
-
-TOOLS = []
-
-def register_tool(tool_class):
-    """Register a tool class for use in the application."""
-    TOOLS.append(tool_class)
-    return tool_class
-
-
-@register_tool
-class WaterDisturbTool:
-    """Disturb the water surface with mouse input."""
-    last_mouse: tuple[float, float] | None = None
-
-    def __init__(self, app: WaterApp):
-        self.app = app
-        self.last_mouse = None
-
-    def update(self, dt: float):
-        pass
-
-    def on_mouse_drag_event(self, x, y, dx, dy):
-        # Convert mouse coordinates (window: origin top-left) to texture coordinates (origin bottom-left)
-        cur_pos = self.app.screen_to_water(x, y)
-
-        if cur_pos is None:
-            self.last_mouse = None
-            return
-
-        if self.last_mouse is None:
-            self.last_mouse = cur_pos
-
-        # Apply a disturbance by drawing between the last and current mouse positions.
-        self.app.water_sim.disturb(self.last_mouse, cur_pos)
-        self.last_mouse = cur_pos
-
-    def on_mouse_press_event(self, x, y, button):
-        # Record the initial mouse position in texture coordinates.
-        self.last_mouse = self.app.screen_to_water(x, y)
-
-    def on_mouse_release_event(self, x, y, button):
-        self.last_mouse = None
-
-
-@register_tool
-class RaiseTool:
-    """Raise/Lower the terrain surface"""
-
-    def __init__(self, app: WaterApp):
-        self.app = app
-        self.last_mouse = None
-        self.speed = 0
-
-    def update(self, dt: float):
-        if self.last_mouse is None:
-            return
-
-        model = self.app.terrain_instance.model
-        heights = model.mesh.heights
-
-        w, h = heights.shape
-        x, y = self.last_mouse
-
-        # numpy distance from pos
-        coords_x, coords_y = np.indices((w, h))
-        dist = np.sqrt(
-            (coords_x - h * y) ** 2 + (coords_y - w * x) ** 2
-        )
-        if self.speed > 0:
-            # Raise terrain
-            width = 4
-        else:
-            # Lower terrain
-            width = 2
-        heights += self.speed * 0.2 * np.exp(-dist / width)
-        recompute_normals(model.mesh)
-        model.update_mesh()
-
-    def on_mouse_drag_event(self, x, y, dx, dy):
-        # Convert mouse coordinates (window: origin top-left) to texture coordinates (origin bottom-left)
-        self.last_mouse = self.app.screen_to_water(x, y)
-
-    def on_mouse_press_event(self, x, y, button):
-        # Record the initial mouse position in texture coordinates.
-        self.last_mouse = self.app.screen_to_water(x, y)
-        self.speed = 1 if button == self.app.wnd.mouse_states.left else -1
-
-    def on_mouse_release_event(self, x, y, button):
-        self.last_mouse = None
-
-
-@register_tool
-class SmoothTool:
-    """Smooth the terrain surface."""
-
-    def __init__(self, app: WaterApp):
-        self.app = app
-        self.last_mouse = None
-        self.speed = 0
-        self.target_height = None
-
-    def update(self, dt: float):
-        if self.last_mouse is None or self.target_height is None:
-            return
-
-        model = self.app.terrain_instance.model
-        heights = model.mesh.heights
-
-        w, h = heights.shape
-        x, y = self.last_mouse
-
-        # numpy distance from pos
-        coords_x, coords_y = np.indices((w, h))
-        dist = np.sqrt(
-            (coords_x - h * y) ** 2 + (coords_y - w * x) ** 2
-        )
-        effect = np.exp(-dist / 4) * (1 - 0.2 ** dt)
-        heights[:] = heights * (1 - effect) + self.target_height * effect
-
-        recompute_normals(model.mesh)
-        model.update_mesh()
-
-    def on_mouse_drag_event(self, x, y, dx, dy):
-        # Convert mouse coordinates (window: origin top-left) to texture coordinates (origin bottom-left)
-        self.last_mouse = self.app.screen_to_water(x, y)
-        if self.target_height is None:
-            self._set_target_height()
-
-    def on_mouse_press_event(self, x, y, button):
-        # Record the initial mouse position in texture coordinates.
-        self.last_mouse = self.app.screen_to_water(x, y)
-        self._set_target_height()
-
-    def _set_target_height(self):
-        model = self.app.terrain_instance.model
-
-        heights = model.mesh.heights
-
-        x, y = self.last_mouse
-        w, h = heights.shape
-
-        ny = round(h * y)
-        nx = round(w * x)
-        if 0 <= nx < w and 0 <= ny < h:
-            self.target_height = heights[ny, nx]
-        else:
-            self.target_height = None
-
-    def on_mouse_release_event(self, x, y, button):
-        self.last_mouse = None
 
 
 
