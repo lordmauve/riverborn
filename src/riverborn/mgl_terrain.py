@@ -178,13 +178,72 @@ class WaterApp(mglw.WindowConfig):
         self.plant_model = self.scene.load_wavefront('fern.obj', material=plant_material, capacity=50)
 
         # Create plant instances
-        for _ in range(20):
-            inst = self.scene.add(self.plant_model)
-            # Random position on the terrain
-            inst.pos = glm.vec3(random.uniform(-20, 20), 0, random.uniform(-20, 20))
-            inst.rotate(random.uniform(0, 2 * math.pi), glm.vec3(0, 1, 0))
-            inst.scale = glm.vec3(random.uniform(0.05, 0.1))
-            inst.update()
+        rng = random.Random(42)
+
+        # Plant distribution parameters
+        terrain_width = 200   # Width of terrain in world units
+        terrain_depth = 200   # Depth of terrain in world units
+        plant_spacing = 5    # Distance between plants
+        water_level = 1.0     # Y position of water surface
+
+        # Store plant instances for future updates
+        self.plant_grid = {}
+
+        heights = self.terrain_instance.model.mesh.heights
+        h_rows, h_cols = heights.shape
+
+        # Calculate grid dimensions to cover the entire terrain
+        grid_size_x = terrain_width // plant_spacing
+        grid_size_z = terrain_depth // plant_spacing
+
+        # Place plants in a grid across the entire terrain
+        for i in range(-grid_size_x//2, grid_size_x//2):
+            for j in range(-grid_size_z//2, grid_size_z//2):
+                # Calculate world position with random offset
+                world_x = i * plant_spacing + rng.uniform(-plant_spacing/4, plant_spacing/4)
+                world_z = j * plant_spacing + rng.uniform(-plant_spacing/4, plant_spacing/4)
+
+                # Convert world coordinates to normalized coordinates (0-1)
+                norm_x = (world_x + terrain_width/2) / terrain_width
+                norm_z = (world_z + terrain_depth/2) / terrain_depth
+
+                # Skip if out of bounds
+                if not (0 <= norm_x <= 1 and 0 <= norm_z <= 1):
+                    continue
+
+                # Perform bilinear filtering to get an accurate height estimate
+                x0 = math.floor(norm_x * (h_cols - 1))
+                x1 = min(x0 + 1, h_cols - 1)
+                z0 = math.floor(norm_z * (h_rows - 1))
+                z1 = min(z0 + 1, h_rows - 1)
+
+                sx = (norm_x * (h_cols - 1)) - x0
+                sz = (norm_z * (h_rows - 1)) - z0
+
+                h00 = heights[z0, x0]
+                h10 = heights[z0, x1]
+                h01 = heights[z1, x0]
+                h11 = heights[z1, x1]
+
+                height = (1 - sx) * (1 - sz) * h00 + sx * (1 - sz) * h10 + (1 - sx) * sz * h01 + sx * sz * h11
+
+                # Only place plants above water level
+                if height > water_level:
+                    # Store grid position for future updates
+                    self.plant_grid[(i, j)] = (world_x, world_z)
+
+                    # Set plant position
+                    plant_pos = glm.vec3(world_x, height, world_z)
+                else:
+                    # Skip if below water level
+                    continue
+
+                inst = self.scene.add(self.plant_model)
+                # Random position on the terrain
+                inst.pos = plant_pos
+                inst.rotate(rng.uniform(0, 2 * math.pi), glm.vec3(0, 1, 0))
+                inst.scale = glm.vec3(rng.uniform(0.05, 0.1))
+                inst.update()
 
         canoe_material = Material(
             double_sided=False,
