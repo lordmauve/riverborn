@@ -58,7 +58,8 @@ class Part:
     """
     vbo: moderngl.Buffer
     vbotype: Tuple[str, ...]  # Format string and attribute names
-    uniforms: Dict[str, Any] = field(default_factory=dict)
+    uniforms: Dict[str, Any]
+    depth_uniforms: Dict[str, Any]
     ibo: Optional[moderngl.Buffer] = None
     indexed: bool = False
     vao_args: Optional[List[Tuple]] = None
@@ -409,10 +410,10 @@ class WavefrontModel(Model):
         super().__init__(ctx, capacity, material)
 
         for mesh_name, mesh_obj in mesh.meshes.items():
-            for material in mesh_obj.materials:
-                if not material:
+            for obj_material in mesh_obj.materials:
+                if not obj_material:
                     continue
-                match material.vertex_format:
+                match obj_material.vertex_format:
                     case 'T2F_N3F_V3F':
                         vbotype = '2f 3f 3f', 'in_texcoord_0', 'in_normal', 'in_position'
                     case 'T2F_V3F':
@@ -420,16 +421,17 @@ class WavefrontModel(Model):
                     case 'N3F_V3F':
                         vbotype = '3f 3f', 'in_normal', 'in_position'
                     case _:
-                        raise ValueError(f"Unsupported vertex format: {material.vertex_format}")
+                        raise ValueError(f"Unsupported vertex format: {obj_material.vertex_format}")
 
-                vertices = np.array(material.vertices, dtype='f4')
+                vertices = np.array(obj_material.vertices, dtype='f4')
                 vbo = ctx.buffer(vertices.tobytes())
 
                 # Create uniforms dictionary for textures if present
                 uniforms = {}
-                if material.texture and 'in_texcoord_0' in vbotype:
+                uniforms['diffuse_color'] = obj_material.diffuse
+                if obj_material.texture and 'in_texcoord_0' in vbotype:
                     uniforms = {
-                        'diffuse_tex': self.load_texture(Path(material.texture.path).name)
+                        'diffuse_tex': self.load_texture(Path(obj_material.texture.path).name),
                     }
                 else:
                     vbotype = subformat(vbotype, normal=True)
@@ -439,12 +441,13 @@ class WavefrontModel(Model):
                     vbo=vbo,
                     vbotype=vbotype,
                     uniforms=uniforms,
-                    indexed=hasattr(material, 'faces') and material.faces
+                    depth_uniforms={'diffuse_tex': uniforms['diffuse_tex']} if material.alpha_test else {},
+                    indexed=hasattr(obj_material, 'faces') and obj_material.faces
                 )
 
                 # Add indices if this part is indexed
                 if part.indexed:
-                    indices = np.array([i for face in material.faces for i in face], dtype='i4')
+                    indices = np.array([i for face in obj_material.faces for i in face], dtype='i4')
                     part.ibo = ctx.buffer(indices.tobytes())
 
                 # Set up VAO arguments for rendering
@@ -497,6 +500,7 @@ class TerrainModel(Model):
             indexed=True,
             vbotype=vbotype,
             uniforms=uniforms,
+            depth_uniforms=uniforms if material.alpha_test else {},
             vao_args=[(vbo, *vbotype),
                       (self.instance_buffer, '16f4/i', 'm_model')]
         )
@@ -882,7 +886,7 @@ class Scene:
                 try:
                     depth_shader.bind(
                         light_space_matrix=viewproj,
-                        **part.uniforms
+                        **part.depth_uniforms
                     )
                 except ValueError as e:
                     raise Exception(

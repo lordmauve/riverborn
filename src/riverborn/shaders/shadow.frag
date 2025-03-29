@@ -8,6 +8,8 @@ in vec4 frag_pos_light_space;
 #ifdef TEXTURE
 in vec2 frag_uv;
 uniform sampler2D diffuse_tex;
+#else
+uniform vec4 diffuse_color;
 #endif
 
 uniform vec3 light_dir;
@@ -30,7 +32,7 @@ void main() {
         discard;
     }
 #else
-    vec4 tex_color = vec4(1.0);
+    vec4 tex_color = diffuse_color;
 #endif
 
     // Get the normal and check if we're viewing the back face
