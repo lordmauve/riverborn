@@ -180,6 +180,10 @@ class WaterApp(mglw.WindowConfig):
         self.canoe = self.scene.add(canoe_model)
         self.canoe.pos = glm.vec3(0, 0, 0)
 
+        oar_model = self.scene.load_wavefront('oar.obj', material=canoe_material, capacity=1)
+        self.oar = self.scene.add(oar_model)
+        self.oar.local_pos = glm.vec3(0, 0, -1)
+        self.oar.local_rot = glm.quat()
 
         self.offscreen_depth = self.ctx.depth_texture(self.wnd.size)
         self.offscreen_fbo = self.ctx.framebuffer(
@@ -255,6 +259,8 @@ class WaterApp(mglw.WindowConfig):
             self.pos_to_water(back),
             self.pos_to_water(front),
         )
+
+        self.oar.pos = self.canoe.matrix *  self.oar.local_pos
 
         self.camera.eye = self.canoe.pos + glm.vec3(0, 15, -20)
         self.camera.look_at(self.canoe.pos)
