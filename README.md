@@ -11,6 +11,8 @@ canoe or a kayak?
 
 ## Controls
 
+At the title screen, press Space to play.
+
 Left Arrow - paddle on the left side
 Right Arrow - paddle on the right side
 
