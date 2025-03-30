@@ -1,6 +1,6 @@
 [project]
 name = "riverborn"
-version = "1.0.2"
+version = "1.0.3"
 description = "A river canoeing game for PyWeek 39"
 authors = [
   {name = "Daniel Pope", email = "mauve@mauveweb.co.uk"},
@@ -58,6 +58,3 @@ module = [
     "pywavefront",
 ]
 ignore_missing_imports = true
-
-[tool.uv.sources]
-wasabi2d = { git = "https://github.com/lordmauve/wasabi2d/", rev = "ff3e7113743d0f8e5f778f94de3de9369ea46390" }
