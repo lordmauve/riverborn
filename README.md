@@ -8,6 +8,12 @@ insistent about this.
 Where is the river? Are all these creatures authentic river fauna? Is this a
 canoe or a kayak?
 
+## Installing
+
+The easiest way to run the game is to install `uv` and `uv run riverborn`.
+
+You can also build a venv from requirements.txt and run `run_game.py`.
+
 
 ## Controls
 
