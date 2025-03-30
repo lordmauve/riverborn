@@ -430,6 +430,9 @@ class WaterApp(mglw.WindowConfig):
     def update(self, dt: float) -> None:
         self.tool.update(dt)
         self.update_canoe(dt)
+        x, y, z = self.canoe.pos
+        self.light.target = round(x, -1), 0, round(z, -1)
+        self.light.update_matrices()
         m = self.canoe.matrix
 
         back = m * glm.vec3(0, 0, 1)
