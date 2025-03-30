@@ -1,6 +1,6 @@
 [project]
 name = "riverborn"
-version = "1.0.0"
+version = "1.0.2"
 description = "A river canoeing game for PyWeek 39"
 authors = [
   {name = "Daniel Pope", email = "mauve@mauveweb.co.uk"},
@@ -28,15 +28,11 @@ rb-heightfield = "riverborn.heightfield:main"
 rb-ripples = "riverborn.ripples:main"
 
 [build-system]
-requires = ["flit_scm>=1.7.0"]
-build-backend = "flit_scm:buildapi"
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
 
 [tool.flit.sdist]
 exclude = [".gitignore"]
-
-[tool.setuptools_scm]
-write_to = "src/riverborn/_version.py"
-relative_to = "pyproject.toml"
 
 [dependency-groups]
 dev = [
