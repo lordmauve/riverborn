@@ -1,6 +1,6 @@
 [project]
 name = "riverborn"
-version = "1.0.3"
+version = "1.0.4"
 description = "A river canoeing game for PyWeek 39"
 authors = [
   {name = "Daniel Pope", email = "mauve@mauveweb.co.uk"},
