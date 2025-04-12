@@ -545,22 +545,22 @@ class WaterApp(mglw.WindowConfig):
             self.scene.draw(self.camera, self.light)
 
         self.water_prog["env_cube"].value = 1
-        self.water_prog["near"].value = 0.1
-        self.water_prog["far"].value = 1000.0
-        self.water_prog["resolution"].value = self.wnd.size
+        # self.water_prog["near"].value = 0.1
+        # self.water_prog["far"].value = 1000.0
+        # self.water_prog["resolution"].value = self.wnd.size
         self.water_prog["m_model"].write(self.water_model)
         self.env_cube.use(location=1)
         self.water_prog["env_cube"].value = 1
 
         self.water_sim.texture.use(location=0)
         self.water_prog["height_map"].value = 0
-        self.water_prog['base_water'] = (0.2, 0.15, 0.1)
-        self.water_prog['water_opaque_depth'] = 3
+        self.water_prog['base_water'] = (0.1, 0.05, 0.00)
+        #self.water_prog['water_opaque_depth'] = 3
 
         self.camera.bind(self.water_prog, pos_uniform="camera_pos")
-        x, y, w, h = self.wnd.viewport
-        self.water_prog["resolution"].value = self.wnd.size
-        with self.ctx.scope(enable_only=moderngl.BLEND):
+        #x, y, w, h = self.wnd.viewport
+        #self.water_prog["resolution"].value = self.wnd.size
+        with self.ctx.scope(enable_only=moderngl.BLEND | moderngl.DEPTH_TEST):
             self.water_vao.render()
 
         if self.recorder is not None:
@@ -579,7 +579,7 @@ class WaterApp(mglw.WindowConfig):
         #     )
 
     def on_resize(self, width: int, height: int):
-        self.water_prog["resolution"].value = (width, height)
+        #self.water_prog["resolution"].value = (width, height)
         # Create the camera.
         self.camera.set_aspect(width / height)
         self.ctx.gc()
