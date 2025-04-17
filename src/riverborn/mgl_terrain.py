@@ -397,6 +397,19 @@ class WaterApp(mglw.WindowConfig):
 
         self.on_resize(*self.wnd.size)
 
+        # ------------------------------
+        # Create ambient occlusion shader program.
+        # ------------------------------
+        self.ao_prog = load_shader("ambient_occlusion")
+        self.ao_fbo = self.ctx.framebuffer(
+            color_attachments=[self.ctx.texture(self.wnd.size, 4)]
+        )
+        self.ao_vao = self.ctx.vertex_array(
+            self.ao_prog,
+            [(self.water_vbo, "3f 2f", "in_position", "in_uv")],
+            self.water_ibo,
+        )
+
     def voiceover(self, name):
         with (self.files / f'sounds/{name}.wav').open('rb') as f:
             pyglet.media.load(f'{name}.wav', f, streaming=False).play()
@@ -543,6 +556,18 @@ class WaterApp(mglw.WindowConfig):
         with self.ctx.scope(framebuffer=self.offscreen_fbo, enable=moderngl.DEPTH_TEST):
             self.ctx.clear(0.6, 0.7, 1.0, 1.0)
             self.scene.draw(self.camera, self.light)
+
+        # ------------------------------
+        # Second pass: Render ambient occlusion.
+        # ------------------------------
+        with self.ctx.scope(framebuffer=self.ao_fbo, enable=moderngl.DEPTH_TEST):
+            self.ctx.clear(0.0, 0.0, 0.0, 1.0)
+            self.ao_prog["depth_texture"].value = 2
+            self.ao_prog["resolution"].value = self.wnd.size
+            self.ao_prog["near"].value = self.camera.near
+            self.ao_prog["far"].value = self.camera.far
+            self.offscreen_depth.use(location=2)
+            self.ao_vao.render()
 
         copy_shader = load_shader("copy")
         copy_shader.bind(
