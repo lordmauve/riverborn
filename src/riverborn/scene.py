@@ -163,7 +163,6 @@ class Model:
         instances_dirty: Flag indicating whether GPU buffer needs update
         material: Material properties for this model
     """
-    textures: dict[str, moderngl.Texture] = {}
 
     def __init__(self, ctx: moderngl.Context, capacity: int = 100, material: Optional['Material'] = None) -> None:
         """
@@ -182,6 +181,7 @@ class Model:
         self.instance_buffer = ctx.buffer(reserve=capacity * 16 * 4)
         self.instance_refs: weakref.WeakValueDictionary[int, Instance] = weakref.WeakValueDictionary()
         self.material = material or Material()
+        self.textures = {}  # FIXME: share textures between models
 
     def load_texture(self, path: str) -> moderngl.Texture:
         """Load and create a ModernGL texture from an image file."""
