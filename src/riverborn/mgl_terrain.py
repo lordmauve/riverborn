@@ -540,40 +540,27 @@ class WaterApp(mglw.WindowConfig):
         # ------------------------------
         # First pass: Render scene into offscreen framebuffer.
         # ------------------------------
-        with self.ctx.scope(framebuffer=self.offscreen_fbo, enable=moderngl.DEPTH_TEST):
+        with self.ctx.scope(enable=moderngl.DEPTH_TEST):
             self.ctx.clear(0.6, 0.7, 1.0, 1.0)
             self.scene.draw(self.camera, self.light)
 
-        copy_shader = load_shader("copy")
-        copy_shader.bind(
-            input_texture=self.offscreen_color,
-        )
-        with self.ctx.scope(enable_only=moderngl.NOTHING):
-            self.ctx.depth_mask = False
-            self.copy_vao.render(copy_shader)
-            self.ctx.depth_mask = True
-
         self.water_prog["env_cube"].value = 1
-        self.water_prog["depth_tex"].value = 2
-        self.water_prog["near"].value = 0.1
-        self.water_prog["far"].value = 1000.0
-        self.water_prog["resolution"].value = self.wnd.size
+        # self.water_prog["near"].value = 0.1
+        # self.water_prog["far"].value = 1000.0
+        # self.water_prog["resolution"].value = self.wnd.size
         self.water_prog["m_model"].write(self.water_model)
         self.env_cube.use(location=1)
         self.water_prog["env_cube"].value = 1
-        self.offscreen_depth.use(location=2)
-        self.water_prog["depth_tex"].value = 2
 
         self.water_sim.texture.use(location=0)
         self.water_prog["height_map"].value = 0
-        self.water_prog['base_water'] = (0.2, 0.15, 0.1)
-        self.water_prog['water_opaque_depth'] = 3
-
+        self.water_prog['base_water'] = (0.1, 0.05, 0.00)
+        #self.water_prog['water_opaque_depth'] = 3
 
         self.camera.bind(self.water_prog, pos_uniform="camera_pos")
-        x, y, w, h = self.wnd.viewport
-        self.water_prog["resolution"].value = self.wnd.size
-        with self.ctx.scope(enable_only=moderngl.BLEND):
+        #x, y, w, h = self.wnd.viewport
+        #self.water_prog["resolution"].value = self.wnd.size
+        with self.ctx.scope(enable_only=moderngl.BLEND | moderngl.DEPTH_TEST):
             self.water_vao.render()
 
         if self.recorder is not None:
@@ -592,14 +579,7 @@ class WaterApp(mglw.WindowConfig):
         #     )
 
     def on_resize(self, width: int, height: int):
-        # When the window is resized, update the offscreen framebuffer and resolution uniform.
-        self.offscreen_depth = self.ctx.depth_texture((width, height))
-        self.offscreen_color = self.ctx.texture((width, height), 4)
-        self.offscreen_fbo = self.ctx.framebuffer(
-            color_attachments=[self.offscreen_color],
-            depth_attachment=self.offscreen_depth,
-        )
-        self.water_prog["resolution"].value = (width, height)
+        #self.water_prog["resolution"].value = (width, height)
         # Create the camera.
         self.camera.set_aspect(width / height)
         self.ctx.gc()
