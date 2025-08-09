@@ -40,6 +40,65 @@ from riverborn.shader import load_shader, BindableProgram
 from riverborn.terrain import blank_terrain, make_terrain, Mesh
 from pyglm.glm import array
 
+
+def compute_bounds(positions: np.ndarray) -> tuple[glm.vec3, glm.vec3]:
+    """Compute axis aligned bounds from a set of positions."""
+    mins = positions.min(axis=0)
+    maxs = positions.max(axis=0)
+    return glm.vec3(*mins), glm.vec3(*maxs)
+
+
+def transform_aabb(min_v: glm.vec3, max_v: glm.vec3, m: glm.mat4) -> tuple[glm.vec3, glm.vec3]:
+    """Transform an axis aligned bounding box by a matrix."""
+    corners = [
+        glm.vec3(min_v.x, min_v.y, min_v.z),
+        glm.vec3(min_v.x, min_v.y, max_v.z),
+        glm.vec3(min_v.x, max_v.y, min_v.z),
+        glm.vec3(min_v.x, max_v.y, max_v.z),
+        glm.vec3(max_v.x, min_v.y, min_v.z),
+        glm.vec3(max_v.x, min_v.y, max_v.z),
+        glm.vec3(max_v.x, max_v.y, min_v.z),
+        glm.vec3(max_v.x, max_v.y, max_v.z),
+    ]
+    transformed = [glm.vec3(m * glm.vec4(c, 1.0)) for c in corners]
+    tmins = glm.vec3(min(p.x for p in transformed),
+                     min(p.y for p in transformed),
+                     min(p.z for p in transformed))
+    tmaxs = glm.vec3(max(p.x for p in transformed),
+                     max(p.y for p in transformed),
+                     max(p.z for p in transformed))
+    return tmins, tmaxs
+
+
+def extract_frustum_planes(mat: glm.mat4) -> list[glm.vec4]:
+    """Extract normalized frustum planes from a matrix."""
+    m = glm.transpose(mat)
+    planes = [
+        m[3] + m[0],  # left
+        m[3] - m[0],  # right
+        m[3] + m[1],  # bottom
+        m[3] - m[1],  # top
+        m[3] + m[2],  # near
+        m[3] - m[2],  # far
+    ]
+    norm = []
+    for p in planes:
+        n = glm.vec3(p.x, p.y, p.z)
+        l = glm.length(n)
+        norm.append(p / l)
+    return norm
+
+
+def aabb_in_frustum(min_v: glm.vec3, max_v: glm.vec3, planes: list[glm.vec4]) -> bool:
+    """Return True if the AABB intersects the frustum defined by planes."""
+    for p in planes:
+        px = max_v.x if p.x >= 0 else min_v.x
+        py = max_v.y if p.y >= 0 else min_v.y
+        pz = max_v.z if p.z >= 0 else min_v.z
+        if glm.dot(glm.vec3(p.x, p.y, p.z), glm.vec3(px, py, pz)) + p.w < 0:
+            return False
+    return True
+
 if typing.TYPE_CHECKING:
     from riverborn.shadow import ShadowSystem
 
@@ -182,6 +241,10 @@ class Model:
         self.instance_refs: weakref.WeakValueDictionary[int, Instance] = weakref.WeakValueDictionary()
         self.material = material or Material()
         self.textures = {}  # FIXME: share textures between models
+        self.bounds_min = glm.vec3(0.0)
+        self.bounds_max = glm.vec3(0.0)
+        self._visible_matrices = array.zeros(capacity, glm.mat4)
+        self._visible_count = 0
 
     def load_texture(self, path: str) -> moderngl.Texture:
         """Load and create a ModernGL texture from an image file."""
@@ -230,6 +293,7 @@ class Model:
         if self.instance_count >= len(self.instance_matrices):
             self.instance_matrices = self.instance_matrices.repeat(2)
             self.instance_buffer.orphan(size=len(self.instance_matrices) * 16 * 4)
+            self._visible_matrices = self._visible_matrices.repeat(2)
         index = self.instance_count
         self.instance_matrices[index] = matrix
         self.instance_count += 1
@@ -312,6 +376,12 @@ class Model:
             light: Light object for lighting calculations
         """
         self.flush_instances()
+        if hasattr(self, '_current_planes') and self._current_planes is not None:
+            self._cull_instances(self._current_planes)
+        else:
+            self._visible_matrices[:self.instance_count] = self.instance_matrices[:self.instance_count]
+            self._visible_count = self.instance_count
+        self.instance_buffer.write(self._visible_matrices[:self._visible_count])
 
         # Get the appropriate shader based on current state
 
@@ -369,7 +439,7 @@ class Model:
 
             # Bind all uniforms and render
             shader.bind(**uniforms)
-            vao.render(instances=self.instance_count)
+            vao.render(instances=self._visible_count)
 
             # Clean up the VAO since we don't store it
             vao.release()
@@ -378,6 +448,17 @@ class Model:
         if self.instances_dirty:
             self.instance_buffer.write(self.instance_matrices[:self.instance_count])
             self.instances_dirty = False
+
+    def _cull_instances(self, planes: list[glm.vec4]):
+        """Cull instances against the provided frustum planes."""
+        count = 0
+        for i in range(self.instance_count):
+            mat = self.instance_matrices[i]
+            wmin, wmax = transform_aabb(self.bounds_min, self.bounds_max, mat)
+            if aabb_in_frustum(wmin, wmax, planes):
+                self._visible_matrices[count] = mat
+                count += 1
+        self._visible_count = count
 
     def destroy(self) -> None:
         """
@@ -425,6 +506,23 @@ class WavefrontModel(Model):
 
                 vertices = np.array(obj_material.vertices, dtype='f4')
                 vbo = ctx.buffer(vertices.tobytes())
+                step = {
+                    'T2F_N3F_V3F': 8,
+                    'T2F_V3F': 5,
+                    'N3F_V3F': 6,
+                    'V3F': 3,
+                }[obj_material.vertex_format]
+                positions = vertices.reshape(-1, step)[:, -3:]
+                bmin, bmax = compute_bounds(positions)
+                if len(self.parts) == 0:
+                    self.bounds_min, self.bounds_max = bmin, bmax
+                else:
+                    self.bounds_min = glm.vec3(min(self.bounds_min.x, bmin.x),
+                                               min(self.bounds_min.y, bmin.y),
+                                               min(self.bounds_min.z, bmin.z))
+                    self.bounds_max = glm.vec3(max(self.bounds_max.x, bmax.x),
+                                               max(self.bounds_max.y, bmax.y),
+                                               max(self.bounds_max.z, bmax.z))
 
                 # Create uniforms dictionary for textures if present
                 uniforms = {}
@@ -510,6 +608,10 @@ class TerrainModel(Model):
 
         # Add the part
         self.parts.append(self.part)
+
+        positions = mesh.vertices['in_position']
+        bmin, bmax = compute_bounds(positions)
+        self.bounds_min, self.bounds_max = bmin, bmax
 
     def update_mesh(self):
         """Update the mesh data in the GPU buffer."""
@@ -854,9 +956,13 @@ class Scene:
             # Render depth pass
             shadow_system.render_depth(self)
 
-        # Render all models (they will handle shadow uniforms internally if needed)
+        vp = camera.get_proj_matrix() * camera.get_view_matrix()
+        planes = extract_frustum_planes(vp)
+
         for model in self.models.values():
+            model._current_planes = planes
             model.draw(camera, light)
+            model._current_planes = None
 
     def render_depth(self, viewproj: glm.mat4) -> None:
         """Render the scene to the shadow map from the light's perspective.
