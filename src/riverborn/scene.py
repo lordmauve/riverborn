@@ -21,7 +21,7 @@ import importlib.resources
 from pathlib import Path
 import typing
 import imageio
-import noise
+from perlin_numpy import generate_fractal_noise_2d
 import pywavefront
 import moderngl
 import moderngl_window as mglw
@@ -973,21 +973,11 @@ def subformat(vbotype: tuple[str, ...], *, texcoord: bool = False, normal: bool 
 def create_noise_texture(size: int = 256, color=(1.0, 1.0, 1.0)) -> np.ndarray:
     """Generate a texture with Perlin noise."""
     tex_width, tex_height = size, size
+    res_x = max(1, 20)
+    res_y = max(1, 20)
+    noise = generate_fractal_noise_2d((tex_height, tex_width), (res_y, res_x), octaves=4, persistence=0.5, lacunarity=2.0, rng=np.random.default_rng(24))
+    c = (noise + 1) * 0.5
     texture_data = np.zeros((tex_height, tex_width, 3), dtype=np.uint8)
-    texture_noise_scale = 0.05
-    for i in range(tex_height):
-        for j in range(tex_width):
-            t = noise.pnoise2(
-                j * texture_noise_scale,
-                i * texture_noise_scale,
-                octaves=4,
-                persistence=0.5,
-                lacunarity=2.0,
-                repeatx=1024,
-                repeaty=1024,
-                base=24,
-            )
-            c = (t + 1) * 0.5
-            texture_data[i, j] = tuple(int(c * comp * 255) for comp in color)
-    # Flip vertically to account for texture coordinate differences.
+    for k in range(3):
+        texture_data[..., k] = (c * color[k] * 255).astype(np.uint8)
     return np.flipud(texture_data)

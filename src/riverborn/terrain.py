@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-import noise
+from perlin_numpy import generate_fractal_noise_2d
 import numpy as np
 
 
@@ -122,24 +122,19 @@ def make_terrain(
     mesh = blank_terrain(segments, grid_width, grid_depth)
     heights = mesh.heights
 
-    xs = np.linspace(-grid_width / 2, grid_width / 2, segments + 1)
-    zs = np.linspace(-grid_depth / 2, grid_depth / 2, segments + 1)
-
-    for i, z in enumerate(zs):
-        for j, x in enumerate(xs):
-            heights[i, j] = noise.pnoise2(
-                x * noise_scale,
-                z * noise_scale,
-                octaves=4,
-                persistence=0.5,
-                lacunarity=2.0,
-                repeatx=1024,
-                repeaty=1024,
-                base=42,
-            )
-
+    # Generate 2D Perlin fractal noise for the heights
+    res_x = max(1, int(1/noise_scale))
+    res_y = max(1, int(1/noise_scale))
+    noise = generate_fractal_noise_2d(
+        (segments + 1, segments + 1),
+        (res_y, res_x),
+        octaves=4,
+        persistence=0.5,
+        lacunarity=2.0,
+        rng=np.random.default_rng(42)
+    )
+    heights[:, :] = noise
     heights *= height_multiplier
-
     recompute_normals(mesh)
     return mesh
 

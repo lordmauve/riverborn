@@ -11,8 +11,8 @@ dependencies = [
     "imageio>=2.37.0",
     "moderngl>=5.12.0",
     "moderngl-window[glfw,pywavefront]>=3.1.1",
-    "noise>=1.2.2",
     "numpy>=2.2.4",
+    "perlin-numpy>=0.0.1",
     "wasabi-geom>=2.3.0",
     "wasabi2d==1.5.0.a1",
 ]

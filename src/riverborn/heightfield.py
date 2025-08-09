@@ -2,7 +2,7 @@
 import moderngl
 import moderngl_window as mglw
 import numpy as np
-import noise
+from perlin_numpy import generate_fractal_noise_2d
 from pyglm import glm
 
 from .terrain import make_terrain
@@ -14,23 +14,14 @@ from .scene import Light, Scene, TerrainModel
 def create_noise_texture(size: int = 256, color=(1.0, 1.0, 1.0)):
     """Generate a texture with Perlin noise."""
     tex_width, tex_height = size, size
+    res_x = 4
+    res_y = 4
+    # Generate 2D Perlin fractal noise in range [-1, 1]
+    noise = generate_fractal_noise_2d((tex_height, tex_width), (res_y, res_x), octaves=4, persistence=0.5, lacunarity=2, rng=np.random.default_rng(24))
+    c = (noise + 1) * 0.5  # Map to [0, 1]
     texture_data = np.zeros((tex_height, tex_width, 3), dtype=np.uint8)
-    texture_noise_scale = 0.05
-    for i in range(tex_height):
-        for j in range(tex_width):
-            t = noise.pnoise2(
-                j * texture_noise_scale,
-                i * texture_noise_scale,
-                octaves=4,
-                persistence=0.5,
-                lacunarity=2.0,
-                repeatx=1024,
-                repeaty=1024,
-                base=24,
-            )
-            c = (t + 1) * 0.5
-            texture_data[i, j] = tuple(int(c * comp * 255) for comp in color)
-    # Flip vertically to account for texture coordinate differences.
+    for k in range(3):
+        texture_data[..., k] = (c * color[k] * 255).astype(np.uint8)
     texture_data = np.flipud(texture_data)
     return texture_data
 

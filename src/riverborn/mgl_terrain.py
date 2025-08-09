@@ -11,7 +11,7 @@ import moderngl
 from moderngl_window import geometry
 import moderngl_window as mglw
 import numpy as np
-import noise
+from perlin_numpy import generate_fractal_noise_2d
 import imageio as iio
 from wasabigeom import vec2
 from wasabi2d import loop, clock
@@ -49,22 +49,13 @@ def create_quad(size):
 
 # Helper: generate a grayscale height map (256x256) using Perlin noise.
 def generate_height_map(width=256, height=256, scale=0.1, octaves=4, base=24):
+    res_x = max(1, int(1/scale))
+    res_y = max(1, int(1/scale))
+    noise = generate_fractal_noise_2d((height, width), (res_y, res_x), octaves=octaves, persistence=0.5, lacunarity=2.0, rng=np.random.default_rng(base))
+    c = (noise + 1) * 0.5  # Map to [0, 1]
     data = np.zeros((height, width, 3), dtype=np.uint8)
-    for i in range(height):
-        for j in range(width):
-            n = noise.pnoise2(
-                j * scale,
-                i * scale,
-                octaves=octaves,
-                persistence=0.5,
-                lacunarity=2.0,
-                repeatx=1024,
-                repeaty=1024,
-                base=base,
-            )
-            color = int((n + 1) * 0.5 * 255)
-            data[i, j] = (color, color, color)
-    # Flip vertically so UVs match OpenGL conventions.
+    for k in range(3):
+        data[..., k] = (c * 255).astype(np.uint8)
     data = np.flipud(data)
     return data
 
