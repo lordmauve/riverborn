@@ -39,6 +39,7 @@ glcontext==3.0.0 \
     --hash=sha256:ef4b4ec35e2b720f4cd250bb92cf6417add445490bf780345596da5a796a0e6f \
     --hash=sha256:f4e285e5d40e7a9bafeb0651c3d8f1a7c822525dec7091e97109ba87a70dbd1e \
     --hash=sha256:fa5a14778d13ecf4a0dd60a7825427bf6ac0383eacb3b8b1a9c23e4976aa0c8c
+    # via moderngl
 glfw==2.8.0 \
     --hash=sha256:0239e478ff065719064fd1272ad29f8542e8178b11c614674bb930d85aa2d1e7 \
     --hash=sha256:0fd982cf42a8e3137e05e392280826311961f9e99c82a0ccf22a63a0d2acd143 \
@@ -49,9 +50,11 @@ glfw==2.8.0 \
     --hash=sha256:523e1fc03898bcb0711f78d6f21eee58c1f865bb764cbd36b9549580a4c43454 \
     --hash=sha256:90e90d328b0b26fed6e1631d21801e2d8a7a0c5dcb480e733c177567ec9666f0 \
     --hash=sha256:9cd20351b14587c6fe7063afb33cc03152e38dd2bff2b69613cb044bf3bdb635
+    # via moderngl-window
 imageio==2.37.0 \
     --hash=sha256:11efa15b87bc7871b61590326b2d635439acc321cf7f8ce996f812543ce10eed \
     --hash=sha256:71b57b3669666272c818497aebba2b4c5f20d5b37c81720e5e1a56d59c492996
+    # via riverborn
 mapbox-earcut==1.0.3 \
     --hash=sha256:05de0accc70431c2270dbb13fd75b6f10b19624d42f26b377995b1fb46ac5844 \
     --hash=sha256:17cdd6f14d1161839eea67a0ce796a09bcb3183903dc7b213011f38907b71279 \
@@ -82,6 +85,7 @@ mapbox-earcut==1.0.3 \
     --hash=sha256:eb874f7562a49ae0fb7bd47bcc9b4854cc53e3e4f7f26674f02f3cadb006ce16 \
     --hash=sha256:f19b2bcf6475bc591f48437d3214691a6730f39b1f6dfd7505b69c4345485b0c \
     --hash=sha256:fdc55574ef7b613004874a459d2d59c07e1ef45cebb83f86c4958f7d3e2d6069
+    # via wasabi2d
 moderngl==5.12.0 \
     --hash=sha256:00d94f9cb485d87c85088edad624201e152d8ac401793a024b16cd9e2bc4dbf6 \
     --hash=sha256:071042dd4846e58cbe204cf49341b62cd209fdcb6d48018feb5a61c66707fcb2 \
@@ -116,12 +120,18 @@ moderngl==5.12.0 \
     --hash=sha256:eaa3de9446c6febec4d5f888e6f1a4e9398bc5a5ea70b1570ea447213641d4a6 \
     --hash=sha256:edd91057b8d76beebac0d7b0c741466ee8f37eaf3c07856785c2872afe0b35ac \
     --hash=sha256:f6efb432f5164f871471d1da36e3a4be9dc3efd7a1e48d0ac6b751e556af5d02
+    # via
+    #   moderngl-window
+    #   riverborn
+    #   wasabi2d
 moderngl-window==3.1.1 \
     --hash=sha256:29c2827505f87399f3461d480b2778910fddeebe44ea803301215cf212a6c1bc \
     --hash=sha256:e3b3ac2b4e23afcbfdac1971318a4db893bed3ba6a8fbde3367b1226af39b2e5
+    # via riverborn
 multipledispatch==1.0.0 \
     --hash=sha256:0c53cd8b077546da4e48869f49b13164bebafd0c2a5afceb6bb6a316e7fb46e4 \
     --hash=sha256:5c839915465c68206c3e9c473357908216c28383b425361e5d144594bf85a7e0
+    # via pyrr
 numpy==2.2.4 \
     --hash=sha256:05c076d531e9998e7e694c36e8b349969c56eadd2cdcd07242958489d79a7286 \
     --hash=sha256:0d54974f9cf14acf49c60f0f7f4084b6579d24d439453d5fc5805d46a165b542 \
@@ -178,6 +188,18 @@ numpy==2.2.4 \
     --hash=sha256:f4162988a360a29af158aeb4a2f4f09ffed6a969c9776f8f3bdee9b06a8ab7e5 \
     --hash=sha256:f486038e44caa08dbd97275a9a35a283a8f1d2f0ee60ac260a1790e76660833c \
     --hash=sha256:f7de08cbe5551911886d1ab60de58448c6df0f67d9feb7d1fb21e9875ef95e91
+    # via
+    #   imageio
+    #   mapbox-earcut
+    #   moderngl-window
+    #   perlin-numpy
+    #   pyrr
+    #   riverborn
+    #   wasabi2d
+perlin-numpy==0.0.1 \
+    --hash=sha256:4463c4e66fa815ee8f7faee0be4264ca11698e5e74a825e8035d0f0af0374b07 \
+    --hash=sha256:5d770389a4b3317f3be90dabc497030328ec666ab493cc9c224b745b0dadc195
+    # via riverborn
 pillow==11.1.0 \
     --hash=sha256:015c6e863faa4779251436db398ae75051469f7c903b043a48f078e437656f83 \
     --hash=sha256:0a2f91f8a8b367e7a57c6e91cd25af510168091fb89ec5146003e424e1558a96 \
@@ -239,6 +261,9 @@ pillow==11.1.0 \
     --hash=sha256:f7955ecf5609dee9442cbface754f2c6e541d9e6eda87fad7f7a989b0bdb9d71 \
     --hash=sha256:f86d3a7a9af5d826744fabf4afd15b9dfef44fe69a98541f666f66fbb8d3fef9 \
     --hash=sha256:fbd43429d0d7ed6533b25fc993861b8fd512c42d04514a0dd6337fb3ccf22761
+    # via
+    #   imageio
+    #   moderngl-window
 pygame==2.6.1 \
     --hash=sha256:00827aba089355925902d533f9c41e79a799641f03746c50a374dc5c3362e43d \
     --hash=sha256:10e3d2a55f001f6c0a6eb44aa79ea7607091c9352b946692acedb2ac1482f1c9 \
@@ -269,9 +294,11 @@ pygame==2.6.1 \
     --hash=sha256:da3ad64d685f84a34ebe5daacb39fff14f1251acb34c098d760d63fee768f50c \
     --hash=sha256:ef07c0103d79492c21fced9ad68c11c32efa6801ca1920ebfd0f15fb46c78b1c \
     --hash=sha256:f3935459109da4bb0b3901da9904f0a3e52028a3332a355d298b1673a334cf21
+    # via wasabi2d
 pyglet==2.1.3 \
     --hash=sha256:5a7eaf35869ecf7451fb49cc064c4c0e9a118eaa5e771667c607125b13f85e33 \
     --hash=sha256:9a2c3c84228402ea7103443ac8a52060cc1c91419951ec1105845ce30fed2ce8
+    # via moderngl-window
 pyglm==2.8.1 \
     --hash=sha256:05a101dbd363c9f58dc70b34adfdd0b82631b226504c67fdd7343ea8fa659a8b \
     --hash=sha256:081339fec2bc66bdd6e402e3371ef3ba6cc4369fd5a1c08f3048cae837996f12 \
@@ -326,14 +353,18 @@ pyglm==2.8.1 \
     --hash=sha256:f5e17554a06235cfd48af443fa1c24d41ebf41688e998af8a73ac89e0a643ddb \
     --hash=sha256:f634b4b691897ebdad286f6636a16a5ccc0edc723075521d7d03ec762d5c804e \
     --hash=sha256:f943b5de0756fa999d30ae6a7fa9e318146de73e636f020a83aae7ab3d2ec058
+    # via moderngl-window
 pyrr==0.10.3 \
     --hash=sha256:3c0f7b20326e71f706a610d58f2190fff73af01eef60c19cb188b186f0ec7e1d \
     --hash=sha256:d8af23fb9bb29262405845e1c98f7339fbba5e49323b98528bd01160a75c65ac
+    # via wasabi2d
 pywavefront==1.3.3 \
     --hash=sha256:ec79cadd046b168434b01031e574f4105f821d06cb8cf754801e4dc18076bbeb
+    # via moderngl-window
 sortedcontainers==2.4.0 \
     --hash=sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88 \
     --hash=sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0
+    # via wasabi2d
 wasabi-geom==2.3.0 \
     --hash=sha256:074b96cf5d78cb8e0fec8553344e7e374dfe683a42ba37a974e20d989af2077b \
     --hash=sha256:0b6cd312066ca003f8187ac1b860bf56453c87b55ee9294291581ebc2fa6dc90 \
@@ -368,7 +399,10 @@ wasabi-geom==2.3.0 \
     --hash=sha256:dde351405d2adba12b3f5c40367218c3ec0fc0abdbe5530c06baeac365b0e254 \
     --hash=sha256:df02855c3658acc72eff7a1952e9fcc908eba4dad3147c0499bf12f5af484e2d \
     --hash=sha256:f78be8bba786aaa2762e3ccd1949ba3d5169381e70f94586fbfa7185f8d9ce16
+    # via
+    #   riverborn
+    #   wasabi2d
 wasabi2d==1.5.0a1 \
     --hash=sha256:25151d1c4de104850698744368ae2bd2e1edf776ab18d313ee9c4922f3299732 \
     --hash=sha256:b177d9668fc32cd3cd074d89ccf8735f922dff5af7f7e710bd4e261a03554693
-perlin-numpy
+    # via riverborn
